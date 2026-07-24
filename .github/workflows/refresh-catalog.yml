@@ -1,8 +1,9 @@
 name: Refresh catalog scores
 
-# Twice-monthly rescore. Ratings drift (a new release's IMDb average moves a lot
-# in its first month), so the catalog is rebuilt from the committed matched.csv
-# and the fresh numbers are committed back. GitHub Pages redeploys on push.
+# Monthly rescore, twice on the 1st. Ratings drift (a new release's IMDb
+# average moves a lot in its first month), so the catalog is rebuilt from the
+# committed matched.csv and the fresh numbers are committed back. GitHub
+# Pages redeploys on push.
 #
 # This workflow does NOT change which films are in the catalog — that needs the
 # Letterboxd scrape + TMDB matching, which has a manual review step. See
@@ -10,9 +11,13 @@ name: Refresh catalog scores
 
 on:
   schedule:
-    # 1st and 15th at 09:00 UTC. Cron in Actions is always UTC and does not
-    # follow DST — see DEPLOY.md if you want this pinned to a local hour.
-    - cron: '0 9 1,15 * *'
+    # Midnight and noon US Eastern on the 1st of each month. Actions cron is
+    # always UTC and ignores DST, so this is pinned to EDT (UTC-4): 04:00 and
+    # 16:00 UTC. During EST (roughly early Nov - mid March) that lands at
+    # 1am/1pm Eastern instead of midnight/noon — shift both hours back by 1
+    # (to '0 3,15 1 * *') for that stretch if exact local time matters, or
+    # leave it as the one-hour seasonal drift called out in DEPLOY.md.
+    - cron: '0 4,16 1 * *'
   workflow_dispatch:        # lets you run it by hand from the Actions tab
 
 concurrency:

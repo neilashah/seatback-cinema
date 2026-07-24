@@ -13,7 +13,5 @@
 #   1) WRONG match  -> put the CORRECT tmdb_id
 #   2) FLAGGED-BUT-RIGHT -> put the SAME id the matcher guessed (a "bless")
 #
-# --- Staged from this session's 2 review titles. Confirm the ids on TMDB,
-#     then delete the leading '#' to activate. Both are likely correct. ---
-# protector,1383731,confirmed correct: 2026 film (was flagged: 11 same-title candidates)
-# tina,1262426,confirmed correct: 2024 NZ film; TMDB lists 2025 release date
+protector,1383731,confirmed correct: 2026 film (was flagged: 11 same-title candidates)
+tina,1262426,confirmed correct: 2024 NZ film; TMDB lists 2025 release date

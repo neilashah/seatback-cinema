@@ -80,8 +80,9 @@ never show them back to you, so keep your own copy.
 
 ## 4. The refresh workflow
 
-`refresh-catalog.yml` runs on the **1st and 15th at 09:00 UTC**, and can be
-triggered by hand from the **Actions** tab (`workflow_dispatch`) any time.
+`refresh-catalog.yml` runs on the **1st of each month at midnight and noon
+Eastern**, and can be triggered by hand from the **Actions** tab
+(`workflow_dispatch`) any time.
 
 What it does: rebuilds `catalog.json` from the committed `matched.csv`,
 validates it, commits, and Pages redeploys.
@@ -92,7 +93,8 @@ matcher, and matching has a manual review step (`overrides.csv` — 2 of 198
 needed hand-matching last time). Automating that would let a bad match go live
 unreviewed. So the split is:
 
-- **Scores** — automated, twice monthly. Safe: same titles, fresh numbers.
+- **Scores** — automated, twice on the 1st of each month. Safe: same titles,
+  fresh numbers.
 - **Membership** — manual, when Delta rotates the catalog. Run the Python
   pipeline locally, review the matches, commit the new `matched.csv`, then hit
   "Run workflow" to rescore.
@@ -114,11 +116,14 @@ app. The run shows as failed in the Actions tab so you know to look.
 
 ### About the cron time
 
-Actions cron is **always UTC and does not follow daylight saving**, so a local
-hour drifts by one hour twice a year. `0 9 1,15 * *` is 09:00 UTC. If you'd
-rather it land at a specific local hour, adjust the hour field — and if you
-want the *catalog* refresh timed to Delta's monthly rotation rather than a
-fixed date, that's worth checking against when new titles actually appear.
+Actions cron is **always UTC and does not follow daylight saving**, so a
+fixed-UTC schedule drifts by one hour twice a year relative to local time.
+`0 4,16 1 * *` is pinned to EDT (UTC-4): midnight and noon Eastern. During
+EST (roughly early Nov - mid March) that lands at 1am/1pm Eastern instead —
+shift both hours back by one (`0 3,15 1 * *`) for that stretch if exact local
+time matters, or just accept the seasonal drift. If you want the *catalog*
+refresh timed to Delta's monthly rotation rather than a fixed date, that's
+worth checking against when new titles actually appear.
 
 Also note: scheduled workflows on free runners can start late (queueing), and
 GitHub disables schedules in repos with no activity for 60 days. A manual run

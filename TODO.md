@@ -14,9 +14,6 @@ Running list, updated as items close or new ones surface. See the latest
       Only **The Shawshank Redemption** (M = 19.5) would lose its "Loved by
       All" phrase if the gate were restricted to the `partial` band (M ≥ 40)
       only. Decide: keep gate unrestricted, or add the M ≥ 40 floor.
-- [ ] **Cron timing.** `refresh-catalog.yml` runs `0 9 1,15 * *` (placeholder,
-      UTC, ignores DST). Match it to Delta's actual catalog rotation once
-      that cadence is known.
 - [ ] **Push the gated `scoring.js` to Impure Cinema.** Same file, both
       deployments — otherwise the two apps disagree on the same film's
       verdict. Not yet done.
@@ -72,3 +69,20 @@ Running list, updated as items close or new ones surface. See the latest
       `TRAKT_CLIENT_ID`) — 2026-07-24.
 - [x] Installed to phone home screen; icon and standalone launch confirmed —
       2026-07-24.
+- [x] Cron timing set — `refresh-catalog.yml` now runs the 1st of each month
+      at midnight and noon Eastern (`0 4,16 1 * *`, pinned to EDT; shifts to
+      1am/1pm during EST) — 2026-07-24.
+- [x] Catalog-membership watcher built — `watch_catalog.py` +
+      `.github/workflows/watch-catalog.yml`, runs daily, scrapes only the
+      Letterboxd title list (no TMDB/MDBList/Trakt calls), diffs against
+      committed `titles_with_years.tsv`, opens a `catalog-drift` GitHub
+      issue on change (or `catalog-watch-broken` if the scrape itself looks
+      broken). Verified locally against the live list — 2026-07-24.
+- [x] Matching pipeline re-run to catch up with Delta's July 18 rotation —
+      197 titles (23 added, 24 removed vs. the prior baseline), 195 auto +
+      2 override, 0 left in review. Activated the staged `Protector` /
+      `Tinā` overrides from the prior session (same TMDB ids the fresh match
+      landed on independently). `titles_with_years.tsv` and
+      `pipeline/matched.csv` updated locally — 2026-07-24. Not yet committed
+      or pushed; `catalog.json` still needs `refresh-catalog.yml` run against
+      the new `matched.csv` to actually pick up the new titles.
