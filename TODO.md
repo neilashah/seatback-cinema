@@ -17,10 +17,6 @@ Running list, updated as items close or new ones surface. See the latest
 - [ ] **Push the gated `scoring.js` to Impure Cinema.** Same file, both
       deployments — otherwise the two apps disagree on the same film's
       verdict. Not yet done.
-- [ ] **Trigger `refresh-catalog.yml` manually once** (Actions tab →
-      workflow_dispatch) now that all three secrets are set, to confirm the
-      full pipeline — build, validate, commit, Pages redeploy — works
-      end-to-end in CI, not just locally.
 - [ ] **Decide the fate of `SeatbackCinema-preview.html`.** It's the old
       design mockup, not the deployed app. Currently sitting at repo root.
       Keep as a design reference or delete.
@@ -82,7 +78,7 @@ Running list, updated as items close or new ones surface. See the latest
       197 titles (23 added, 24 removed vs. the prior baseline), 195 auto +
       2 override, 0 left in review. Activated the staged `Protector` /
       `Tinā` overrides from the prior session (same TMDB ids the fresh match
-      landed on independently). `titles_with_years.tsv` and
-      `pipeline/matched.csv` updated locally — 2026-07-24. Not yet committed
-      or pushed; `catalog.json` still needs `refresh-catalog.yml` run against
-      the new `matched.csv` to actually pick up the new titles.
+      landed on independently). Committed, pushed, and confirmed CI run
+      succeeded end-to-end (build → validate → commit → Pages redeploy) —
+      live site verified serving 197 titles, Forrest Gump present, Fast Five
+      gone — 2026-07-24.
