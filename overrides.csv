@@ -1,0 +1,19 @@
+# overrides.csv — manual title→TMDB pins. The matcher reads this BEFORE
+# calling TMDB; any title with a row here is resolved to your confirmed id,
+# marked `override`, and never re-enters the review queue.
+#
+# Columns:  key , tmdb_id , note
+#   key     = Letterboxd slug (preferred — stable across title edits) OR a
+#             plain title string. Slug is column 3 of titles_with_years.tsv.
+#   tmdb_id = the confirmed TMDB movie id
+#   note    = free text: why you pinned it (shows up in matched.csv)
+#
+# Lines starting with '#' and blank lines are ignored, so comment freely.
+# Two kinds of decision both go here and both remove the title from review:
+#   1) WRONG match  -> put the CORRECT tmdb_id
+#   2) FLAGGED-BUT-RIGHT -> put the SAME id the matcher guessed (a "bless")
+#
+# --- Staged from this session's 2 review titles. Confirm the ids on TMDB,
+#     then delete the leading '#' to activate. Both are likely correct. ---
+# protector,1383731,confirmed correct: 2026 film (was flagged: 11 same-title candidates)
+# tina,1262426,confirmed correct: 2024 NZ film; TMDB lists 2025 release date

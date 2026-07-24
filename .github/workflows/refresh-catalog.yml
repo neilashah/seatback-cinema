@@ -1,0 +1,85 @@
+name: Refresh catalog scores
+
+# Twice-monthly rescore. Ratings drift (a new release's IMDb average moves a lot
+# in its first month), so the catalog is rebuilt from the committed matched.csv
+# and the fresh numbers are committed back. GitHub Pages redeploys on push.
+#
+# This workflow does NOT change which films are in the catalog — that needs the
+# Letterboxd scrape + TMDB matching, which has a manual review step. See
+# DEPLOY.md. This one only refreshes scores for titles already matched.
+
+on:
+  schedule:
+    # 1st and 15th at 09:00 UTC. Cron in Actions is always UTC and does not
+    # follow DST — see DEPLOY.md if you want this pinned to a local hour.
+    - cron: '0 9 1,15 * *'
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+concurrency:
+  group: refresh-catalog
+  cancel-in-progress: false
+
+permissions:
+  contents: write           # needed to commit the refreshed catalog
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'   # build_catalog.js needs 18+ for global fetch
+
+      - name: Build catalog
+        working-directory: pipeline
+        env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+          MDBLIST_KEY: ${{ secrets.MDBLIST_KEY }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          SCORING_PATH: '../scoring.js'      # single shared engine, at repo root
+        run: node build_catalog.js --out ../catalog.new.json --delay 400
+
+      # A bad API day (rate limits, an outage) can produce a technically-valid
+      # but gutted catalog. Refuse to publish one: if this step fails, nothing
+      # is committed and the previously deployed catalog.json stays live, which
+      # is the stale-fallback — passengers keep last cycle's data rather than
+      # opening the app to an empty list.
+      - name: Validate before publishing
+        run: |
+          node -e '
+            const fs = require("fs");
+            const next = JSON.parse(fs.readFileSync("catalog.new.json", "utf8"));
+            const prev = fs.existsSync("catalog.json")
+              ? JSON.parse(fs.readFileSync("catalog.json", "utf8")) : [];
+            if (!Array.isArray(next)) throw new Error("catalog is not an array");
+            if (next.length < 50) throw new Error(`only ${next.length} titles — refusing to publish`);
+            if (prev.length && next.length < prev.length * 0.8)
+              throw new Error(`catalog shrank ${prev.length} -> ${next.length} (>20%) — refusing to publish`);
+            const scored = next.filter(m => m.is != null).length;
+            if (scored < next.length * 0.5)
+              throw new Error(`only ${scored}/${next.length} titles scored — API likely failing`);
+            console.log(`OK: ${next.length} titles, ${scored} scored`);
+          '
+
+      - name: Publish
+        run: |
+          mv catalog.new.json catalog.json
+          if git diff --quiet -- catalog.json; then
+            echo "No score changes this cycle — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add catalog.json pipeline/verdict-debug.csv
+          git commit -m "Refresh catalog scores ($(date -u +%Y-%m-%d))"
+          git push
+
+      - name: Upload debug sidecar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verdict-debug
+          path: pipeline/verdict-debug.csv
+          if-no-files-found: ignore

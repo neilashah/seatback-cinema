@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seatback Cinema — structure mockup</title>
+<style>
+  :root{
+    --bg:#0B0B0D; --surface:#17171B; --surface-2:#1F1F24; --hairline:#2A2A30;
+    --text:#F2F1ED; --text-dim:#8C8B92; --text-faint:#5A5A60;
+    --plum-panned:#4A3468; --plum-mixed:#6B4C96; --plum-liked:#8F68C4; --plum-acclaimed:#B48EEA;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif; height:100%; }
+  #app{ max-width:420px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative; }
+
+  .header{ padding:20px 18px 10px; position:sticky; top:0; background:rgba(11,11,13,0.92);
+    backdrop-filter:blur(20px); z-index:10; border-bottom:1px solid var(--hairline); }
+  .wordmark{ display:flex; align-items:center; gap:11px; }
+  .wordmark svg{ width:34px; height:34px; }
+  .wordmark span{ font-size:22px; font-weight:800; letter-spacing:-0.01em; color:var(--text); }
+
+  .tabbar{ display:flex; gap:4px; margin-top:14px; background:var(--surface); border-radius:11px; padding:3px; }
+  .tab{ flex:1; text-align:center; padding:8px 4px; border-radius:9px; font-size:12.5px; font-weight:600;
+    color:var(--text-faint); cursor:pointer; transition:background .15s, color .15s; }
+  .tab.active{ background:var(--surface-2); color:var(--text); }
+
+  .filter-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:14px 18px 4px; }
+  .filter-row-left{ display:flex; align-items:center; gap:8px; min-width:0; overflow-x:auto; }
+  .filter-btn{ display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--hairline);
+    border-radius:9px; padding:7px 12px; font-size:12.5px; color:var(--text); cursor:pointer; flex-shrink:0; white-space:nowrap; }
+  .filter-btn svg{ width:13px; height:13px; }
+  .filter-count{ background:var(--text); color:#0B0B0D; font-size:9.5px; font-weight:700;
+    border-radius:8px; padding:1px 6px; margin-left:2px; }
+  .sort-label{ font-size:11.5px; color:var(--text-faint); }
+
+  #results{ flex:1; padding:8px 12px 90px; }
+  .row{ display:flex; align-items:center; gap:12px; padding:9px 6px; border-radius:12px; cursor:pointer; }
+  .row:active{ background:var(--surface); }
+  .thumb{ width:42px; height:62px; border-radius:6px; background:var(--surface-2); flex-shrink:0; object-fit:cover; display:block; }
+  .row-info{ min-width:0; flex:1; }
+  .row-title{ font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row-title mark{ background:none; color:var(--plum-liked); }
+  .row-meta{ font-size:12.5px; color:var(--text-dim); margin-top:2px; }
+  .row-meta span:not(:last-child)::after{ content:"·"; margin:0 5px; color:var(--text-faint); }
+
+  .score-badge{ width:34px; height:34px; position:relative; flex-shrink:0; cursor:pointer; }
+  .score-badge svg{ width:100%; height:100%; transform:rotate(-90deg); }
+  .score-badge .track{ fill:none; stroke:var(--hairline); stroke-width:3; }
+  .score-badge .fill{ fill:none; stroke-width:3; stroke-linecap:round; }
+  .score-badge .num{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10px; font-weight:700; }
+
+  .new-pill{ font-size:9px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;
+    color:var(--text); background:var(--surface-2); border:1px solid var(--hairline); border-radius:5px;
+    padding:2px 6px; margin-left:6px; }
+
+  .search-wrap{ padding:14px 18px 4px; position:relative; }
+  #searchInput{ width:100%; background:var(--surface); border:1px solid var(--hairline); border-radius:11px;
+    padding:11px 14px; font-size:15px; color:var(--text); outline:none; }
+  #searchInput::placeholder{ color:var(--text-faint); }
+  #searchInput:focus{ border-color:#3A3A42; }
+
+  .empty{ text-align:center; color:var(--text-faint); font-size:13.5px; padding:50px 30px 0; line-height:1.5; }
+
+  .sheet-backdrop{ position:fixed; inset:0; max-width:420px; margin:0 auto; background:rgba(0,0,0,0.5);
+    opacity:0; pointer-events:none; transition:opacity .25s; z-index:20; }
+  .sheet-backdrop.open{ opacity:1; pointer-events:auto; }
+  .sheet{ position:fixed; left:0; right:0; bottom:0; max-width:420px; margin:0 auto; background:var(--surface);
+    border-radius:20px 20px 0 0; border:1px solid var(--hairline); border-bottom:none;
+    transform:translateY(100%); transition:transform .3s cubic-bezier(.32,.72,0,1); z-index:21; padding:8px 20px 28px; }
+  .sheet.open{ transform:translateY(0); }
+  .sheet-handle{ width:36px; height:4px; background:var(--hairline); border-radius:2px; margin:8px auto 18px; }
+  .sheet-title{ font-size:16px; font-weight:700; margin:0 0 18px; display:flex; justify-content:space-between; align-items:center; }
+  .sheet-title .clear{ font-size:12.5px; font-weight:600; color:var(--text-faint); }
+  .filter-group{ margin-bottom:22px; }
+  .filter-group-label{ font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--text-faint); margin-bottom:10px; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ font-size:12.5px; padding:7px 13px; border-radius:9px; background:var(--surface-2);
+    border:1px solid var(--hairline); color:var(--text-dim); cursor:pointer; }
+  .chip.selected{ background:var(--text); color:#0B0B0D; border-color:var(--text); }
+  .apply-btn{ width:100%; padding:13px; background:var(--text); color:#0B0B0D; border:none; border-radius:11px;
+    font-size:15px; font-weight:700; cursor:pointer; margin-top:6px; }
+
+  .sort-option{ display:flex; align-items:center; justify-content:space-between; padding:13px 4px;
+    font-size:14.5px; color:var(--text); border-bottom:1px solid var(--hairline); cursor:pointer; }
+  .sort-option:last-child{ border-bottom:none; }
+  .sort-option .check{ width:16px; height:16px; opacity:0; color:var(--text); }
+  .sort-option.selected .check{ opacity:1; }
+  .sort-option .sub{ font-size:11.5px; color:var(--text-faint); display:block; margin-top:1px; }
+
+  .row-wrapper{ }
+  .row-breakdown{ max-height:0; overflow:hidden; opacity:0; transition:max-height .3s ease, opacity .25s ease; }
+  .row-breakdown.open{ max-height:120px; opacity:1; }
+  .bd-strip{ display:flex; gap:16px; padding:2px 6px 16px 60px; }
+  .bd-item{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .bd-mini-ring{ width:26px; height:26px; position:relative; }
+  .bd-mini-ring svg{ width:100%; height:100%; transform:rotate(-90deg); }
+  .mini-track{ fill:none; stroke:var(--hairline); stroke-width:2.5; }
+  .mini-fill{ fill:none; stroke-width:2.5; stroke-linecap:round; }
+  .bd-mini-label{ font-size:8.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; }
+  .bd-mini-score{ font-size:9.5px; color:var(--text-dim); font-family:ui-monospace,"SF Mono",Menlo,monospace; }
+  .bd-empty{ padding:2px 6px 16px 60px; font-size:11.5px; color:var(--text-faint); }
+  .bd-verdict{ font-size:12.5px; font-weight:600; padding:10px 6px 0 60px; letter-spacing:-0.005em; }
+  .bd-verdict .conj{ color:var(--text-faint); font-weight:500; margin:0 4px; }
+  .bd-verdict .misc-word{ color:var(--text-dim); }
+
+  .runtime-label{ font-size:13px; color:var(--text); margin-bottom:12px; font-variant-numeric:tabular-nums; }
+  .runtime-label .hint{ color:var(--text-faint); font-size:11.5px; display:block; margin-top:2px; }
+  #runtimeSlider{ -webkit-appearance:none; width:100%; height:4px; border-radius:2px;
+    background:var(--hairline); outline:none; margin:6px 0 4px; }
+  #runtimeSlider::-webkit-slider-thumb{ -webkit-appearance:none; width:20px; height:20px; border-radius:50%;
+    background:var(--text); cursor:pointer; border:none; }
+  #runtimeSlider::-moz-range-thumb{ width:20px; height:20px; border-radius:50%; background:var(--text); border:none; cursor:pointer; }
+  .runtime-ticks{ display:flex; justify-content:space-between; font-size:10px; color:var(--text-faint); }
+
+  .tab:focus-visible, .filter-btn:focus-visible, .row:focus-visible, .chip:focus-visible,
+  .apply-btn:focus-visible, .sort-option:focus-visible, .score-badge:focus-visible,
+  #searchInput:focus-visible, #runtimeSlider:focus-visible{
+    outline:2px solid var(--text); outline-offset:2px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition-duration:0.01ms !important; animation-duration:0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="header">
+    <div class="wordmark">
+      <svg viewBox="0 0 64 64" fill="none" stroke="#F2F1ED" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="12" y="14" width="40" height="36" rx="8"/>
+        <rect x="17" y="19" width="30" height="26" rx="5" opacity="0.35"/>
+        <rect x="30" y="30" width="13" height="10" rx="2.5" fill="#8F68C4" stroke="none"/>
+      </svg>
+      <span>Seatback Cinema</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab active" data-tab="browse" tabindex="0" role="button">Browse</div>
+      <div class="tab" data-tab="new" tabindex="0" role="button">New This Month</div>
+      <div class="tab" data-tab="search" tabindex="0" role="button">Search</div>
+    </div>
+  </div>
+
+  <div id="browsePane">
+    <div class="filter-row">
+      <div class="filter-row-left">
+        <div class="filter-btn" id="openFilters" tabindex="0" role="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.3" fill="#17171B"/><circle cx="15" cy="17" r="2.3" fill="#17171B"/></svg>
+          Filters <span class="filter-count" id="filterCount" style="display:none;">0</span>
+        </div>
+        <div class="filter-btn" id="openSort" tabindex="0" role="button">
+          Sort: <span id="sortLabel">Rating</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+      <div class="filter-btn" id="openRating" tabindex="0" role="button">
+        Rating: <span id="ratingLabel">IC</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <div id="searchPane" style="display:none;">
+    <div class="search-wrap">
+      <input id="searchInput" type="text" placeholder="Search this flight's catalog" autocomplete="off">
+    </div>
+    <div id="searchResults"></div>
+  </div>
+
+  <div id="newPane" style="display:none;">
+    <div class="filter-row"><div class="sort-label">Added this month</div></div>
+    <div id="newResults"></div>
+  </div>
+
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="sheet" id="filterSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Filters <span class="clear" id="clearFilters">Clear all</span></div>
+    <div class="filter-group">
+      <div class="filter-group-label">Genre</div>
+      <div class="chip-row" data-group="genre">
+        <div class="chip" data-val="Drama" tabindex="0" role="button">Drama</div>
+        <div class="chip" data-val="Comedy" tabindex="0" role="button">Comedy</div>
+        <div class="chip" data-val="Action" tabindex="0" role="button">Action</div>
+        <div class="chip" data-val="Animation" tabindex="0" role="button">Animation</div>
+        <div class="chip" data-val="Documentary" tabindex="0" role="button">Documentary</div>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-group-label">Tier</div>
+      <div class="chip-row" data-group="tier">
+        <div class="chip" data-val="Acclaimed" tabindex="0" role="button">Acclaimed</div>
+        <div class="chip" data-val="Liked" tabindex="0" role="button">Liked</div>
+        <div class="chip" data-val="Mixed" tabindex="0" role="button">Mixed</div>
+        <div class="chip" data-val="Panned" tabindex="0" role="button">Panned</div>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-group-label">Miscibility</div>
+      <div class="chip-row" data-group="misc">
+        <div class="chip" data-val="Loved by All" tabindex="0" role="button">Loved by All</div>
+        <div class="chip" data-val="Critics' Film" tabindex="0" role="button">Critics' Film</div>
+        <div class="chip" data-val="Audience's Film" tabindex="0" role="button">Audience's Film</div>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-group-label">Time left on your flight</div>
+      <div class="runtime-label" id="runtimeLabel">No limit — show everything</div>
+      <input type="range" id="runtimeSlider" min="20" max="150" step="5" value="150">
+      <div class="runtime-ticks"><span>20m</span><span>150m+</span></div>
+    </div>
+    <button class="apply-btn" id="applyFilters">Show results</button>
+  </div>
+
+  <div class="sheet-backdrop" id="sortBackdrop"></div>
+  <div class="sheet" id="sortSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Sort by</div>
+    <div class="sort-options" id="sortOptions"></div>
+  </div>
+
+  <div class="sheet-backdrop" id="ratingBackdrop"></div>
+  <div class="sheet" id="ratingSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Show rating</div>
+    <div class="sort-options" id="ratingOptions"></div>
+  </div>
+
+</div>
+
+<script>
+/* =========================================================
+   scoring.js — shared Impurity Score / Miscibility Index engine.
+
+   Single source of truth for the math and phrase/conjunction rules
+   used by BOTH Impure Cinema (ImpureCinema.html) and Seatback Cinema
+   (SeatbackCinema.html). Load this before either app's own script
+   block, via a script tag referencing this file by src.
+
+   What lives here vs. what stays per-app:
+   - HERE: weights, calibration constants, the Miscibility Index math
+     (computeVerdict), tier-name thresholds, MI phrase selection, the
+     and/but conjunction rule, and the "Panned"+"Panned by All"
+     collision rule.
+   - PER-APP: tier -> color mapping (Impure Cinema's magenta ramp vs.
+     Seatback's Passport Plum ramp are deliberately independent
+     palettes) and all markup/rendering.
+
+   Exposes a single global: window.Scoring
+   ========================================================= */
+(function (global) {
+  'use strict';
+
+  /* ---------- Impurity Score weighting (quality-weighted average) ---------- */
+  const BASE_WEIGHTS = { imdb: 1.0, rt: 1.1, mc: 1.4, letterboxd: 1.05, tmdb: 0.7 };
+  const CONFIDENCE_CAP = 50000;
+  function confidence(votes) {
+    return Math.min(1, Math.log10((votes || 0) + 1) / Math.log10(CONFIDENCE_CAP));
+  }
+
+  /* ---------- Miscibility Index (critic/audience concordance) ---------- */
+  const MISC_CAL = {
+    imdb:       { mu: 63, sigma: 10 },
+    letterboxd: { mu: 64, sigma: 11 },
+    tmdb:       { mu: 66, sigma: 9 },
+    popcorn:    { mu: 60, sigma: 18 },
+    mcuser:     { mu: 64, sigma: 12 },
+    trakt:      { mu: 72, sigma: 8 },
+    tomatoes:   { mu: 61, sigma: 26 },
+    metacritic: { mu: 56, sigma: 17 },
+    rogerebert: { mu: 62, sigma: 22 },
+  };
+  const MISC_W_CRITIC   = { metacritic: 1.4, tomatoes: 1.1, rogerebert: 0.6 };
+  const MISC_W_AUDIENCE = { letterboxd: 1.05, imdb: 1.0, popcorn: 0.9, mcuser: 0.8, trakt: 0.8, tmdb: 0.7 };
+  const MISC_CONF_CAP = 50000;
+  const MISC_DISPERSION_THRESHOLD = 0.55;
+  const MISC_P_BASE = 0.08, MISC_P_SAT = 0.32, MISC_P_THRESHOLD = 0.6;
+  const MISC_CONTESTED_GATE = 55;
+  const MISC_TAU = 0.85;
+  const MISC_M_MISCIBLE = 70, MISC_M_SPLIT = 40;
+  const MISC_RELIABILITY_FLOOR = 0.35;
+
+  function miscZ(x, source) {
+    const c = MISC_CAL[source];
+    return Math.max(-3, Math.min(3, (x - c.mu) / c.sigma));
+  }
+  function miscConf(votes) {
+    return votes == null ? 0.5 : Math.min(1, Math.log10(votes + 1) / Math.log10(MISC_CONF_CAP));
+  }
+  // Two-sided polarization: needs mass in BOTH the low (1-3) and high (9-10)
+  // tails of Trakt's rating distribution. A one-sided version was tried and
+  // rejected — it scored unanimous acclaim as "polarizing" as an actual
+  // review-bombing case, since a pile of 9s/10s alone is agreement, not division.
+  function miscPolarization(distribution) {
+    if (!distribution) return null;
+    const total = Object.values(distribution).reduce((a, b) => a + b, 0);
+    if (!total) return null;
+    const low = ((distribution[1]||0) + (distribution[2]||0) + (distribution[3]||0)) / total;
+    const high = ((distribution[9]||0) + (distribution[10]||0)) / total;
+    const balanced = 2 * Math.min(low, high);
+    return Math.max(0, Math.min(1, (balanced - MISC_P_BASE) / (MISC_P_SAT - MISC_P_BASE)));
+  }
+
+  function computeVerdict(mdb, details, trakt) {
+    const criticZ = [];
+    if (mdb.tomatoes && mdb.tomatoes.value != null) criticZ.push({ z: miscZ(mdb.tomatoes.value, 'tomatoes'), weight: MISC_W_CRITIC.tomatoes });
+    if (mdb.metacritic && mdb.metacritic.value != null) criticZ.push({ z: miscZ(mdb.metacritic.value, 'metacritic'), weight: MISC_W_CRITIC.metacritic });
+    if (mdb.rogerebert && (mdb.rogerebert.score != null || mdb.rogerebert.value != null)) {
+      const pct = mdb.rogerebert.score != null ? mdb.rogerebert.score : mdb.rogerebert.value * 25;
+      criticZ.push({ z: miscZ(pct, 'rogerebert'), weight: MISC_W_CRITIC.rogerebert });
+    }
+
+    const audienceZ = [];
+    if (mdb.imdb && mdb.imdb.value != null) audienceZ.push({ z: miscZ(mdb.imdb.value * 10, 'imdb'), weight: MISC_W_AUDIENCE.imdb, c: miscConf(mdb.imdb.votes) });
+    if (mdb.letterboxd && mdb.letterboxd.value != null) audienceZ.push({ z: miscZ(mdb.letterboxd.value * 20, 'letterboxd'), weight: MISC_W_AUDIENCE.letterboxd, c: miscConf(mdb.letterboxd.votes) });
+    if (mdb.popcorn && mdb.popcorn.value != null) audienceZ.push({ z: miscZ(mdb.popcorn.value, 'popcorn'), weight: MISC_W_AUDIENCE.popcorn, c: miscConf(mdb.popcorn.votes) });
+    if (mdb.metacriticuser && (mdb.metacriticuser.score != null || mdb.metacriticuser.value != null)) {
+      const pct = mdb.metacriticuser.score != null ? mdb.metacriticuser.score : mdb.metacriticuser.value * 10;
+      audienceZ.push({ z: miscZ(pct, 'mcuser'), weight: MISC_W_AUDIENCE.mcuser, c: miscConf(mdb.metacriticuser.votes) });
+    }
+    if (trakt && trakt.rating != null) audienceZ.push({ z: miscZ(trakt.rating * 10, 'trakt'), weight: MISC_W_AUDIENCE.trakt, c: miscConf(trakt.votes) });
+    if (details.vote_average) audienceZ.push({ z: miscZ(details.vote_average * 10, 'tmdb'), weight: MISC_W_AUDIENCE.tmdb, c: miscConf(details.vote_count) });
+
+    const sumWC = criticZ.reduce((a, s) => a + s.weight, 0);
+    const C = sumWC ? criticZ.reduce((a, s) => a + s.weight * s.z, 0) / sumWC : null;
+
+    const sumWcA = audienceZ.reduce((a, s) => a + s.weight * s.c, 0);
+    const A = sumWcA ? audienceZ.reduce((a, s) => a + s.weight * s.c * s.z, 0) / sumWcA : null;
+
+    if (C == null || A == null) return { unmeasured: true };
+
+    const R_C = sumWC / Object.values(MISC_W_CRITIC).reduce((a, b) => a + b, 0);
+    const R_A = sumWcA / Object.values(MISC_W_AUDIENCE).reduce((a, b) => a + b, 0);
+    const R = Math.sqrt(R_C * R_A);
+    if (R < MISC_RELIABILITY_FLOOR) return { unmeasured: true };
+
+    let dispersion = null;
+    if (audienceZ.length >= 2) {
+      const varA = audienceZ.reduce((a, s) => a + s.weight * s.c * (s.z - A) ** 2, 0) / sumWcA;
+      dispersion = Math.sqrt(varA);
+    }
+    const P = trakt ? miscPolarization(trakt.distribution) : null;
+
+    const D = R * (A - C);
+    const M = 100 * Math.exp(-((D / MISC_TAU) ** 2));
+
+    const divisive = (dispersion != null && dispersion >= MISC_DISPERSION_THRESHOLD) || (P != null && P >= MISC_P_THRESHOLD);
+    const contested = M < MISC_CONTESTED_GATE && divisive;
+    const audienceDivided = divisive;
+
+    let classification;
+    if (M >= MISC_M_MISCIBLE) classification = 'miscible';
+    else if (M >= MISC_M_SPLIT) classification = 'partial';
+    else classification = D < 0 ? 'critic-darling' : 'crowd-pleaser';
+
+    return { unmeasured: false, C, A, R, D, M, dispersion, P, contested, audienceDivided, classification };
+  }
+
+  /* ---------- Score tier thresholds (name only — color is per-app) ---------- */
+  const SCORE_TIERS = [
+    { min: 85, name: 'Acclaimed' },
+    { min: 70, name: 'Liked' },
+    { min: 50, name: 'Mixed' },
+    { min: 0,  name: 'Panned' }
+  ];
+  function scoreTierName(pct) {
+    return (SCORE_TIERS.find(t => pct >= t.min) || SCORE_TIERS[SCORE_TIERS.length - 1]).name;
+  }
+
+  /* ---------- MI phrase selection + and/but conjunction + collision rule ----------
+     MI phrase semantics describe convergence behavior, not quality — "Loved
+     by All" isn't a restatement of the tier, it's a statement about
+     critic/audience agreement. Conjunction rule: miscible outcomes (agreement,
+     whatever the direction) read "and"; critic-darling/crowd-pleaser
+     (the divergence classifications) read "but" — the conjunction restates
+     the classification's own meaning. */
+  const MISC_CONJ = {
+    "Loved by All": "and", "Panned by All": "and", "In Agreement": "and",
+    "Critics' Film": "but", "Audience's Film": "but"
+  };
+
+  // Derive the MI phrase from a computeVerdict() result. Partial and
+  // Unmeasured verdicts intentionally return null — the ambiguous middle
+  // stays silent rather than forcing a phrase.
+  function phraseForVerdict(verdict) {
+    if (!verdict || verdict.unmeasured || verdict.classification === 'partial') return null;
+    if (verdict.classification === 'miscible') {
+      if (verdict.C >= 1 && verdict.A >= 1) return 'Loved by All';
+      if (verdict.C <= -1 && verdict.A <= -1) return 'Panned by All';
+      return 'In Agreement';
+    }
+    if (verdict.classification === 'critic-darling') return "Critics' Film";
+    if (verdict.classification === 'crowd-pleaser') return "Audience's Film";
+    return null;
+  }
+
+  // Builds the structural pieces of "<Tier> and/but <MI phrase>" without
+  // choosing any color — each app applies its own tier color to whichever
+  // segments this says should be tier-colored.
+  //   { onlyTier: true,  tierWord }                              -> tier alone (no MI phrase)
+  //   { collapsed: true, miscWord }                               -> "Panned by All" collision case
+  //   { tierWord, conjWord, miscWord, miscTierColored }           -> normal case
+  function buildVerdictParts(tierName, miscPhrase) {
+    if (!tierName) return null;
+    if (!miscPhrase) {
+      return { onlyTier: true, collapsed: false, tierWord: tierName };
+    }
+    if (tierName === 'Panned' && miscPhrase === 'Panned by All') {
+      return { onlyTier: false, collapsed: true, miscWord: miscPhrase };
+    }
+    const conj = MISC_CONJ[miscPhrase] || 'and';
+    return {
+      onlyTier: false, collapsed: false,
+      tierWord: tierName, conjWord: conj, miscWord: miscPhrase,
+      miscTierColored: conj === 'and'
+    };
+  }
+
+  global.Scoring = {
+    // Impurity Score
+    BASE_WEIGHTS, CONFIDENCE_CAP, confidence,
+    // Miscibility Index
+    MISC_CAL, MISC_W_CRITIC, MISC_W_AUDIENCE, MISC_CONF_CAP,
+    MISC_DISPERSION_THRESHOLD, MISC_P_BASE, MISC_P_SAT, MISC_P_THRESHOLD,
+    MISC_CONTESTED_GATE, MISC_TAU, MISC_M_MISCIBLE, MISC_M_SPLIT, MISC_RELIABILITY_FLOOR,
+    miscZ, miscConf, miscPolarization, computeVerdict,
+    // Tiers + phrasing
+    SCORE_TIERS, scoreTierName,
+    MISC_CONJ, phraseForVerdict, buildVerdictParts
+  };
+})(window);
+
+</script>
+<script>
+const MOVIES = [
+  { title:"Paris Is Burning", year:1990, runtime:71, genre:"Documentary", is:91, misc:"Loved by All", newThisMonth:false, sources:{ imdb:8.9, rt:96, mc:89, letterboxd:4.5, tmdb:8.4 } },
+  { title:"Whale Rider", year:2002, runtime:101, genre:"Drama", is:87, misc:"In Agreement", newThisMonth:true, sources:{ imdb:7.6, rt:91, mc:78, letterboxd:3.9, tmdb:7.6 } },
+  { title:"Nirvanna the Band the Show the Movie", year:2024, runtime:88, genre:"Comedy", is:78, misc:"Audience's Film", newThisMonth:true, sources:{ imdb:7.9, rt:83, mc:72, letterboxd:3.8, tmdb:7.1 } },
+  { title:"Copa 71", year:2023, runtime:90, genre:"Documentary", is:83, misc:"In Agreement", newThisMonth:false, sources:{ imdb:7.4, rt:96, mc:78, letterboxd:4.0, tmdb:7.8 } },
+  { title:"Lost Ladies", year:2023, runtime:122, genre:"Drama", is:88, misc:"Loved by All", newThisMonth:false, sources:{ imdb:7.9, rt:92, mc:81, letterboxd:4.2, tmdb:8.0 } },
+  { title:"Love on Trial", year:2023, runtime:113, genre:"Drama", is:64, misc:"Audience's Film", newThisMonth:false, sources:{ imdb:6.2, rt:58, mc:55, letterboxd:3.1, tmdb:6.0 } },
+  { title:"Dead Man's Wire", year:2025, runtime:118, genre:"Drama", is:71, misc:"In Agreement", newThisMonth:true, sources:{ imdb:6.8, rt:74, mc:66, letterboxd:3.4, tmdb:6.9 } },
+  { title:"Protector", year:2025, runtime:104, genre:"Action", is:58, misc:"Audience's Film", newThisMonth:false, sources:{ imdb:5.6, rt:44, mc:48, letterboxd:2.8, tmdb:5.9 } },
+  { title:"Tinā", year:2025, runtime:120, genre:"Drama", is:85, misc:"Loved by All", newThisMonth:true, sources:{ imdb:7.8, rt:89, mc:79, letterboxd:4.1, tmdb:7.9 } },
+  { title:"Shrek the Musical", year:2013, runtime:120, genre:"Animation", is:66, misc:"Audience's Film", newThisMonth:false, sources:{ imdb:6.4, rt:60, mc:57, letterboxd:3.2, tmdb:6.5 } },
+  { title:"Puss in Boots: The Three Diablos", year:2012, runtime:22, genre:"Animation", is:70, misc:null, newThisMonth:false, sources:{ imdb:6.7, rt:71, mc:64, letterboxd:3.3, tmdb:6.8 } },
+  { title:"The Masters: A Legacy in Green", year:2024, runtime:45, genre:"Documentary", is:null, misc:null, newThisMonth:false, sources:null },
+];
+// Mockup-only: deterministic placeholder art standing in for real TMDB poster_path images
+MOVIES.forEach(m => { m.poster = `https://picsum.photos/seed/${encodeURIComponent(m.title)}/84/124`; });
+
+// Tier thresholds (Acclaimed/Liked/Mixed/Panned cutoffs) come from
+// scoring.js (Scoring.scoreTierName), shared with Impure Cinema. Only the
+// color mapping below (tierColor) is Seatback's own Passport Plum ramp.
+function tierOf(is){
+  if (is == null) return null;
+  return Scoring.scoreTierName(is);
+}
+// Panned/Mixed darkened significantly vs. the original ramp so the bottom
+// two tiers read as visibly muted/receding, not just "less saturated."
+function tierColor(tier){
+  return { Acclaimed:"#B48EEA", Liked:"#8F68C4", Mixed:"#4A3468", Panned:"#33234E" }[tier] || "var(--hairline)";
+}
+
+// Which rating a title's badge/ring currently displays, and what the sort
+// menu's "Rating" option sorts by — one shared setting driving both.
+const RATING_OPTIONS = {
+  is:         { label:"Impurity Score", short:"IC",   sub:"Weighted blend of all sources" },
+  rt:         { label:"Rotten Tomatoes", short:"RT",   sub:"Critics, RT scale" },
+  imdb:       { label:"IMDb",            short:"IMDb", sub:"Audience, IMDb scale" },
+  metacritic: { label:"Metacritic",      short:"MC",   sub:"Critics, Metascore" },
+  letterboxd: { label:"Letterboxd",      short:"LB",   sub:"Audience, film-literate" },
+  tmdb:       { label:"TMDB",            short:"TMDB", sub:"Audience, general" },
+};
+let currentRating = 'is';
+
+// Normalized 0-100 value for whichever rating is selected — used for both
+// ring fill/tier color and as the sort key, so the two always agree.
+function ratingPct(m, key){
+  if (key === 'is') return m.is;
+  const s = m.sources;
+  if (!s) return null;
+  if (key === 'rt') return s.rt;
+  if (key === 'imdb') return s.imdb * 10;
+  if (key === 'metacritic') return s.mc;
+  if (key === 'letterboxd') return s.letterboxd * 20;
+  if (key === 'tmdb') return s.tmdb * 10;
+  return null;
+}
+// Native display value (the units that source actually uses), for the
+// number shown inside the ring — separate from the pct used for fill/sort.
+function ratingDisplayValue(m, key){
+  if (key === 'is') return m.is;
+  const s = m.sources;
+  if (!s) return null;
+  if (key === 'rt') return Math.round(s.rt);
+  if (key === 'imdb') return s.imdb.toFixed(1);
+  if (key === 'metacritic') return Math.round(s.mc);
+  if (key === 'letterboxd') return s.letterboxd.toFixed(1);
+  if (key === 'tmdb') return s.tmdb.toFixed(1);
+  return null;
+}
+
+function miniRing(value, pct, label){
+  // Same rule as Impure Cinema's breakdown: neutral gray, tier-acclaimed
+  // plum only when that individual source itself scores 85+.
+  const color = pct >= 85 ? '#B48EEA' : 'var(--text-dim)';
+  const r = 11, c = 2*Math.PI*r, offset = c - (Math.max(0,Math.min(100,pct))/100)*c;
+  return `<div class="bd-item">
+    <div class="bd-mini-ring">
+      <svg viewBox="0 0 28 28"><circle class="mini-track" cx="14" cy="14" r="${r}"/>
+        <circle class="mini-fill" cx="14" cy="14" r="${r}" stroke="${color}" stroke-dasharray="${c}" stroke-dashoffset="${offset}"/></svg>
+    </div>
+    <div class="bd-mini-label">${label}</div>
+    <div class="bd-mini-score">${value}</div>
+  </div>`;
+}
+
+// The and/but conjunction rule and the "Panned"+"Panned by All" collision
+// fix live in scoring.js (Scoring.buildVerdictParts), shared with Impure
+// Cinema. Seatback's fake data currently hand-sets m.misc directly rather
+// than deriving it from a real computeVerdict() classification — once real
+// per-source data lands (Phase 1), this can call Scoring.phraseForVerdict()
+// on a real verdict object instead, with no change to this function.
+function buildBreakdownVerdict(m){
+  const tier = tierOf(m.is);
+  const parts = Scoring.buildVerdictParts(tier, m.misc);
+  if (!parts) return '';
+  const tc = tierColor(tier);
+  if (parts.onlyTier){
+    return `<div class="bd-verdict"><span style="color:${tc}">${parts.tierWord}</span></div>`;
+  }
+  if (parts.collapsed){
+    return `<div class="bd-verdict"><span style="color:${tc}">${parts.miscWord}</span></div>`;
+  }
+  const miscSpan = parts.miscTierColored
+    ? `<span style="color:${tc}">${parts.miscWord}</span>`
+    : `<span class="misc-word">${parts.miscWord}</span>`;
+  return `<div class="bd-verdict"><span style="color:${tc}">${parts.tierWord}</span><span class="conj">${parts.conjWord}</span>${miscSpan}</div>`;
+}
+
+function breakdownPanel(m){
+  if (!m.sources){
+    return `<div class="row-breakdown"><div class="bd-empty">Not enough ratings yet for a breakdown.</div></div>`;
+  }
+  const s = m.sources;
+  const items = [
+    miniRing(s.imdb.toFixed(1), s.imdb*10, 'IMDb'),
+    miniRing(Math.round(s.rt), s.rt, 'RT'),
+    miniRing(Math.round(s.mc), s.mc, 'MC'),
+    miniRing(s.letterboxd.toFixed(1), s.letterboxd*20, 'LB'),
+    miniRing(s.tmdb.toFixed(1), s.tmdb*10, 'TMDB'),
+  ].join('');
+  return `<div class="row-breakdown">${buildBreakdownVerdict(m)}<div class="bd-strip">${items}</div></div>`;
+}
+function scoreBadge(m){
+  const pct = ratingPct(m, currentRating);
+  if (pct == null) return `<div class="score-badge" tabindex="0" role="button" aria-label="Score breakdown"><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="17"/></svg><div class="num" style="color:var(--text-faint)">–</div></div>`;
+  const value = ratingDisplayValue(m, currentRating);
+  const tier = tierOf(pct), color = tierColor(tier);
+  const r = 17, c = 2*Math.PI*r, offset = c - (Math.max(0, Math.min(100, pct))/100)*c;
+  return `<div class="score-badge" tabindex="0" role="button" aria-label="Score breakdown">
+    <svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="${r}"/>
+      <circle class="fill" cx="20" cy="20" r="${r}" stroke="${color}" stroke-dasharray="${c}" stroke-dashoffset="${offset}"/></svg>
+    <div class="num">${value}</div>
+  </div>`;
+}
+
+function renderRow(m, highlightQuery){
+  let titleHtml = m.title;
+  if (highlightQuery){
+    const idx = m.title.toLowerCase().indexOf(highlightQuery.toLowerCase());
+    if (idx !== -1){
+      titleHtml = m.title.slice(0, idx) + '<mark>' + m.title.slice(idx, idx + highlightQuery.length) + '</mark>' + m.title.slice(idx + highlightQuery.length);
+    }
+  }
+  return `<div class="row-wrapper">
+    <div class="row">
+      <img class="thumb" src="${m.poster}" alt="" loading="lazy">
+      <div class="row-info">
+        <div class="row-title">${titleHtml}${m.newThisMonth ? '<span class="new-pill">New</span>' : ''}</div>
+        <div class="row-meta"><span>${m.year}</span><span>${m.genre}</span><span>${m.runtime}m</span></div>
+      </div>
+      ${scoreBadge(m)}
+    </div>
+    ${breakdownPanel(m)}
+  </div>`;
+}
+
+const SORT_OPTIONS = {
+  rating:  { label:"Rating",       compare:(a,b) => (ratingPct(b, currentRating) ?? -1) - (ratingPct(a, currentRating) ?? -1) },
+  runtime: { label:"Runtime",      sub:"Shortest first", compare:(a,b) => a.runtime - b.runtime },
+  alpha:   { label:"Alphabetical", sub:"A to Z",         compare:(a,b) => a.title.localeCompare(b.title) },
+};
+let currentSort = 'rating';
+
+const sortOptionsEl = document.getElementById('sortOptions');
+function renderSortOptions(){
+  sortOptionsEl.innerHTML = Object.entries(SORT_OPTIONS).map(([key, o]) => {
+    const sub = key === 'rating' ? `Currently: ${RATING_OPTIONS[currentRating].label}` : o.sub;
+    return `<div class="sort-option${key === currentSort ? ' selected' : ''}" data-key="${key}" tabindex="0" role="button">
+      <span>${o.label}<span class="sub">${sub}</span></span>
+      <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>`;
+  }).join('');
+}
+renderSortOptions();
+
+function sortMovies(list){
+  return [...list].sort(SORT_OPTIONS[currentSort].compare);
+}
+
+const sortSheet = document.getElementById('sortSheet');
+const sortBackdrop = document.getElementById('sortBackdrop');
+document.getElementById('openSort').addEventListener('click', () => { sortSheet.classList.add('open'); sortBackdrop.classList.add('open'); });
+sortBackdrop.addEventListener('click', () => { sortSheet.classList.remove('open'); sortBackdrop.classList.remove('open'); });
+sortOptionsEl.addEventListener('click', (e) => {
+  const opt = e.target.closest('.sort-option');
+  if (!opt) return;
+  currentSort = opt.dataset.key;
+  renderSortOptions();
+  document.getElementById('sortLabel').textContent = SORT_OPTIONS[currentSort].label;
+  applyFiltersToResults();
+  sortSheet.classList.remove('open');
+  sortBackdrop.classList.remove('open');
+});
+
+// Rating picker — controls which source's number/ring shows on every row,
+// and (when sort is set to "Rating") what the list is ordered by.
+const ratingOptionsEl = document.getElementById('ratingOptions');
+function renderRatingOptions(){
+  ratingOptionsEl.innerHTML = Object.entries(RATING_OPTIONS).map(([key, o]) => `
+    <div class="sort-option${key === currentRating ? ' selected' : ''}" data-key="${key}" tabindex="0" role="button">
+      <span>${o.label}<span class="sub">${o.sub}</span></span>
+      <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>`).join('');
+}
+renderRatingOptions();
+
+const ratingSheet = document.getElementById('ratingSheet');
+const ratingBackdrop = document.getElementById('ratingBackdrop');
+document.getElementById('openRating').addEventListener('click', () => { ratingSheet.classList.add('open'); ratingBackdrop.classList.add('open'); });
+ratingBackdrop.addEventListener('click', () => { ratingSheet.classList.remove('open'); ratingBackdrop.classList.remove('open'); });
+ratingOptionsEl.addEventListener('click', (e) => {
+  const opt = e.target.closest('.sort-option');
+  if (!opt) return;
+  currentRating = opt.dataset.key;
+  renderRatingOptions();
+  renderSortOptions(); // "Rating" row's sub-label depends on currentRating
+  document.getElementById('ratingLabel').textContent = RATING_OPTIONS[currentRating].short;
+  applyFiltersToResults(); // re-render badges with the new rating + re-sort if needed
+  ratingSheet.classList.remove('open');
+  ratingBackdrop.classList.remove('open');
+});
+
+// Tap a score badge to expand/collapse its breakdown (5-source mini-ring
+// strip + MI verdict line). Row taps otherwise do nothing — there's no
+// detail view; the row + breakdown is the whole story for this app.
+['results', 'searchResults', 'newResults'].forEach(id => {
+  document.getElementById(id).addEventListener('click', (e) => {
+    const badge = e.target.closest('.score-badge');
+    if (!badge) return;
+    e.stopPropagation();
+    const panel = badge.closest('.row-wrapper').querySelector('.row-breakdown');
+    panel.classList.toggle('open');
+  });
+});
+
+const newList = MOVIES.filter(m => m.newThisMonth);
+document.getElementById('newResults').innerHTML = newList.length
+  ? newList.map(m => renderRow(m)).join('')
+  : `<div class="empty">Nothing new yet this month.</div>`;
+
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+function renderSearch(q){
+  if (!q){ searchResults.innerHTML = MOVIES.map(m => renderRow(m)).join(''); return; }
+  const matches = MOVIES.filter(m => m.title.toLowerCase().includes(q.toLowerCase()));
+  searchResults.innerHTML = matches.length
+    ? matches.map(m => renderRow(m, q)).join('')
+    : `<div class="empty">No matches in this flight's catalog for "${q}".</div>`;
+}
+renderSearch('');
+searchInput.addEventListener('input', () => renderSearch(searchInput.value.trim()));
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('browsePane').style.display = tab.dataset.tab === 'browse' ? '' : 'none';
+    document.getElementById('searchPane').style.display = tab.dataset.tab === 'search' ? '' : 'none';
+    document.getElementById('newPane').style.display = tab.dataset.tab === 'new' ? '' : 'none';
+  });
+});
+
+const sheet = document.getElementById('filterSheet');
+const backdrop = document.getElementById('sheetBackdrop');
+document.getElementById('openFilters').addEventListener('click', () => { sheet.classList.add('open'); backdrop.classList.add('open'); });
+backdrop.addEventListener('click', () => { sheet.classList.remove('open'); backdrop.classList.remove('open'); });
+document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => chip.classList.toggle('selected')));
+document.getElementById('clearFilters').addEventListener('click', () => {
+  document.querySelectorAll('.chip.selected').forEach(c => c.classList.remove('selected'));
+  runtimeSlider.value = RUNTIME_MAX;
+  updateRuntimeLabel();
+});
+
+const RUNTIME_MAX = 150;
+const runtimeSlider = document.getElementById('runtimeSlider');
+const runtimeLabel = document.getElementById('runtimeLabel');
+function updateRuntimeLabel(){
+  const v = Number(runtimeSlider.value);
+  runtimeLabel.innerHTML = v >= RUNTIME_MAX
+    ? `No limit — show everything`
+    : `Fits in <strong>${v} min</strong> or less<span class="hint">Movies longer than your remaining flight time are hidden</span>`;
+}
+runtimeSlider.addEventListener('input', updateRuntimeLabel);
+updateRuntimeLabel();
+
+function selectedVals(group){
+  return [...document.querySelectorAll(`.chip-row[data-group="${group}"] .chip.selected`)].map(c => c.dataset.val);
+}
+
+function applyFiltersToResults(){
+  const genres = selectedVals('genre');
+  const tiers = selectedVals('tier');
+  const miscs = selectedVals('misc');
+  const runtimeCap = Number(runtimeSlider.value);
+
+  const filtered = sortMovies(MOVIES.filter(m => {
+    if (genres.length && !genres.includes(m.genre)) return false;
+    if (tiers.length && !tiers.includes(tierOf(m.is))) return false;
+    if (miscs.length && !(m.misc && miscs.includes(m.misc))) return false;
+    if (runtimeCap < RUNTIME_MAX && m.runtime > runtimeCap) return false;
+    return true;
+  }));
+
+  document.getElementById('results').innerHTML = filtered.length
+    ? filtered.map(m => renderRow(m)).join('')
+    : `<div class="empty">No titles on this flight match those filters.</div>`;
+
+  const activeCount = genres.length + tiers.length + miscs.length + (runtimeCap < RUNTIME_MAX ? 1 : 0);
+  const badge = document.getElementById('filterCount');
+  badge.style.display = activeCount ? 'inline' : 'none';
+  badge.textContent = activeCount;
+}
+
+document.getElementById('applyFilters').addEventListener('click', () => {
+  applyFiltersToResults();
+  sheet.classList.remove('open');
+  backdrop.classList.remove('open');
+});
+
+applyFiltersToResults(); // initial browse render, default sort + no filters
+
+// Keyboard parity: Enter/Space activate any custom (div-based) control the
+// same way a click would, since role="button" alone doesn't give that for free.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target.closest('[role="button"]');
+  if (!el) return;
+  e.preventDefault();
+  el.click();
+});
+</script>
+</body>
+</html>

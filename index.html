@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seatback Cinema</title>
+<meta name="description" content="Browse this flight's movie catalog with real critic and audience scores — works offline.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0B0B0D">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<!-- Standalone launch on iOS, with the dark status bar blending into the app's
+     own background rather than sitting as a light band above it. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Seatback">
+<style>
+  :root{
+    --bg:#0B0B0D; --surface:#17171B; --surface-2:#1F1F24; --hairline:#2A2A30;
+    --text:#F2F1ED; --text-dim:#8C8B92; --text-faint:#5A5A60;
+    --plum-panned:#4A3468; --plum-mixed:#6B4C96; --plum-liked:#8F68C4; --plum-acclaimed:#B48EEA;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif; height:100%; }
+  #app{ max-width:420px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative; }
+
+  .header{ padding:20px 18px 10px; position:sticky; top:0; background:rgba(11,11,13,0.92);
+    backdrop-filter:blur(20px); z-index:10; border-bottom:1px solid var(--hairline); }
+  .wordmark{ display:flex; align-items:center; gap:11px; }
+  .wordmark svg{ width:34px; height:34px; }
+  .wordmark span{ font-size:22px; font-weight:800; letter-spacing:-0.01em; color:var(--text); }
+
+  .tabbar{ display:flex; gap:4px; margin-top:14px; background:var(--surface); border-radius:11px; padding:3px; }
+  .tab{ flex:1; text-align:center; padding:8px 4px; border-radius:9px; font-size:12.5px; font-weight:600;
+    color:var(--text-faint); cursor:pointer; transition:background .15s, color .15s; }
+  .tab.active{ background:var(--surface-2); color:var(--text); }
+
+  .filter-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:14px 18px 4px; }
+  .filter-row-left{ display:flex; align-items:center; gap:8px; min-width:0; overflow-x:auto; }
+  .filter-btn{ display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--hairline);
+    border-radius:9px; padding:7px 12px; font-size:12.5px; color:var(--text); cursor:pointer; flex-shrink:0; white-space:nowrap; }
+  .filter-btn svg{ width:13px; height:13px; }
+  .filter-count{ background:var(--text); color:#0B0B0D; font-size:9.5px; font-weight:700;
+    border-radius:8px; padding:1px 6px; margin-left:2px; }
+  .sort-label{ font-size:11.5px; color:var(--text-faint); }
+
+  #results{ flex:1; padding:8px 12px 90px; }
+  .row{ display:flex; align-items:center; gap:12px; padding:9px 6px; border-radius:12px; cursor:pointer; }
+  .row:active{ background:var(--surface); }
+  .thumb{ width:42px; height:62px; border-radius:6px; background:var(--surface-2); flex-shrink:0; object-fit:cover; display:block; }
+  .thumb-empty{ border:1px solid var(--hairline); }
+  .row-info{ min-width:0; flex:1; }
+  .row-title{ font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row-title mark{ background:none; color:var(--plum-liked); }
+  .row-meta{ font-size:12.5px; color:var(--text-dim); margin-top:2px; }
+  .row-meta span:not(:last-child)::after{ content:"·"; margin:0 5px; color:var(--text-faint); }
+
+  .score-badge{ width:34px; height:34px; position:relative; flex-shrink:0; cursor:pointer; }
+  .score-badge svg{ width:100%; height:100%; transform:rotate(-90deg); }
+  .score-badge .track{ fill:none; stroke:var(--hairline); stroke-width:3; }
+  .score-badge .fill{ fill:none; stroke-width:3; stroke-linecap:round; }
+  .score-badge .num{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10px; font-weight:700; }
+
+  .new-pill{ font-size:9px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;
+    color:var(--text); background:var(--surface-2); border:1px solid var(--hairline); border-radius:5px;
+    padding:2px 6px; margin-left:6px; }
+
+  .search-wrap{ padding:14px 18px 4px; position:relative; }
+  #searchInput{ width:100%; background:var(--surface); border:1px solid var(--hairline); border-radius:11px;
+    padding:11px 14px; font-size:15px; color:var(--text); outline:none; }
+  #searchInput::placeholder{ color:var(--text-faint); }
+  #searchInput:focus{ border-color:#3A3A42; }
+
+  .empty{ text-align:center; color:var(--text-faint); font-size:13.5px; padding:50px 30px 0; line-height:1.5; }
+
+  .sheet-backdrop{ position:fixed; inset:0; max-width:420px; margin:0 auto; background:rgba(0,0,0,0.5);
+    opacity:0; pointer-events:none; transition:opacity .25s; z-index:20; }
+  .sheet-backdrop.open{ opacity:1; pointer-events:auto; }
+  .sheet{ position:fixed; left:0; right:0; bottom:0; max-width:420px; margin:0 auto; background:var(--surface);
+    border-radius:20px 20px 0 0; border:1px solid var(--hairline); border-bottom:none;
+    transform:translateY(100%); transition:transform .3s cubic-bezier(.32,.72,0,1); z-index:21; padding:8px 20px 28px; }
+  .sheet.open{ transform:translateY(0); }
+  .sheet-handle{ width:36px; height:4px; background:var(--hairline); border-radius:2px; margin:8px auto 18px; }
+  .sheet-title{ font-size:16px; font-weight:700; margin:0 0 18px; display:flex; justify-content:space-between; align-items:center; }
+  .sheet-title .clear{ font-size:12.5px; font-weight:600; color:var(--text-faint); }
+  .filter-group{ margin-bottom:22px; }
+  .filter-group-label{ font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--text-faint); margin-bottom:10px; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ font-size:12.5px; padding:7px 13px; border-radius:9px; background:var(--surface-2);
+    border:1px solid var(--hairline); color:var(--text-dim); cursor:pointer; }
+  .chip.selected{ background:var(--text); color:#0B0B0D; border-color:var(--text); }
+  .apply-btn{ width:100%; padding:13px; background:var(--text); color:#0B0B0D; border:none; border-radius:11px;
+    font-size:15px; font-weight:700; cursor:pointer; margin-top:6px; }
+
+  .sort-option{ display:flex; align-items:center; justify-content:space-between; padding:13px 4px;
+    font-size:14.5px; color:var(--text); border-bottom:1px solid var(--hairline); cursor:pointer; }
+  .sort-option:last-child{ border-bottom:none; }
+  .sort-option .check{ width:16px; height:16px; opacity:0; color:var(--text); }
+  .sort-option.selected .check{ opacity:1; }
+  .sort-option .sub{ font-size:11.5px; color:var(--text-faint); display:block; margin-top:1px; }
+
+  .row-wrapper{ }
+  .row-breakdown{ max-height:0; overflow:hidden; opacity:0; transition:max-height .3s ease, opacity .25s ease; }
+  .row-breakdown.open{ max-height:120px; opacity:1; }
+  .bd-strip{ display:flex; gap:16px; padding:2px 6px 16px 60px; }
+  .bd-item{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .bd-mini-ring{ width:26px; height:26px; position:relative; }
+  .bd-mini-ring svg{ width:100%; height:100%; transform:rotate(-90deg); }
+  .mini-track{ fill:none; stroke:var(--hairline); stroke-width:2.5; }
+  .mini-fill{ fill:none; stroke-width:2.5; stroke-linecap:round; }
+  .bd-mini-label{ font-size:8.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; }
+  .bd-mini-score{ font-size:9.5px; color:var(--text-dim); font-family:ui-monospace,"SF Mono",Menlo,monospace; }
+  .bd-empty{ padding:2px 6px 16px 60px; font-size:11.5px; color:var(--text-faint); }
+  .bd-verdict{ font-size:12.5px; font-weight:600; padding:10px 6px 0 60px; letter-spacing:-0.005em; }
+  .bd-verdict .conj{ color:var(--text-faint); font-weight:500; margin:0 4px; }
+  .bd-verdict .misc-word{ color:var(--text-dim); }
+
+  .runtime-label{ font-size:13px; color:var(--text); margin-bottom:12px; font-variant-numeric:tabular-nums; }
+  .runtime-label .hint{ color:var(--text-faint); font-size:11.5px; display:block; margin-top:2px; }
+  #runtimeSlider{ -webkit-appearance:none; width:100%; height:4px; border-radius:2px;
+    background:var(--hairline); outline:none; margin:6px 0 4px; }
+  #runtimeSlider::-webkit-slider-thumb{ -webkit-appearance:none; width:20px; height:20px; border-radius:50%;
+    background:var(--text); cursor:pointer; border:none; }
+  #runtimeSlider::-moz-range-thumb{ width:20px; height:20px; border-radius:50%; background:var(--text); border:none; cursor:pointer; }
+  .runtime-ticks{ display:flex; justify-content:space-between; font-size:10px; color:var(--text-faint); }
+
+  .tab:focus-visible, .filter-btn:focus-visible, .row:focus-visible, .chip:focus-visible,
+  .apply-btn:focus-visible, .sort-option:focus-visible, .score-badge:focus-visible,
+  #searchInput:focus-visible, #runtimeSlider:focus-visible{
+    outline:2px solid var(--text); outline-offset:2px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition-duration:0.01ms !important; animation-duration:0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="header">
+    <div class="wordmark">
+      <svg viewBox="0 0 64 64" fill="none" stroke="#F2F1ED" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="12" y="14" width="40" height="36" rx="8"/>
+        <rect x="17" y="19" width="30" height="26" rx="5" opacity="0.35"/>
+        <rect x="30" y="30" width="13" height="10" rx="2.5" fill="#8F68C4" stroke="none"/>
+      </svg>
+      <span>Seatback Cinema</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab active" data-tab="browse" tabindex="0" role="button">Browse</div>
+      <div class="tab" data-tab="new" tabindex="0" role="button">New This Month</div>
+      <div class="tab" data-tab="search" tabindex="0" role="button">Search</div>
+    </div>
+  </div>
+
+  <div id="browsePane">
+    <div class="filter-row">
+      <div class="filter-row-left">
+        <div class="filter-btn" id="openFilters" tabindex="0" role="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.3" fill="#17171B"/><circle cx="15" cy="17" r="2.3" fill="#17171B"/></svg>
+          Filters <span class="filter-count" id="filterCount" style="display:none;">0</span>
+        </div>
+        <div class="filter-btn" id="openSort" tabindex="0" role="button">
+          Sort: <span id="sortLabel">Rating</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+      <div class="filter-btn" id="openRating" tabindex="0" role="button">
+        Rating: <span id="ratingLabel">IC</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+    <div id="results"></div>
+  </div>
+
+  <div id="searchPane" style="display:none;">
+    <div class="search-wrap">
+      <input id="searchInput" type="text" placeholder="Search this flight's catalog" autocomplete="off">
+    </div>
+    <div id="searchResults"></div>
+  </div>
+
+  <div id="newPane" style="display:none;">
+    <div class="filter-row"><div class="sort-label">Added this month</div></div>
+    <div id="newResults"></div>
+  </div>
+
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="sheet" id="filterSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Filters <span class="clear" id="clearFilters">Clear all</span></div>
+    <div class="filter-group">
+      <div class="filter-group-label">Genre</div>
+      <div class="chip-row" data-group="genre">
+        <div class="chip" data-val="Drama" tabindex="0" role="button">Drama</div>
+        <div class="chip" data-val="Comedy" tabindex="0" role="button">Comedy</div>
+        <div class="chip" data-val="Action" tabindex="0" role="button">Action</div>
+        <div class="chip" data-val="Animation" tabindex="0" role="button">Animation</div>
+        <div class="chip" data-val="Documentary" tabindex="0" role="button">Documentary</div>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-group-label">Tier</div>
+      <div class="chip-row" data-group="tier">
+        <div class="chip" data-val="Acclaimed" tabindex="0" role="button">Acclaimed</div>
+        <div class="chip" data-val="Liked" tabindex="0" role="button">Liked</div>
+        <div class="chip" data-val="Mixed" tabindex="0" role="button">Mixed</div>
+        <div class="chip" data-val="Panned" tabindex="0" role="button">Panned</div>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-group-label">Miscibility</div>
+      <div class="chip-row" data-group="misc">
+        <div class="chip" data-val="Loved by All" tabindex="0" role="button">Loved by All</div>
+        <div class="chip" data-val="Critics' Film" tabindex="0" role="button">Critics' Film</div>
+        <div class="chip" data-val="Audience's Film" tabindex="0" role="button">Audience's Film</div>
+      </div>
+    </div>
+    <div class="filter-group">
+      <div class="filter-group-label">Time left on your flight</div>
+      <div class="runtime-label" id="runtimeLabel">No limit — show everything</div>
+      <input type="range" id="runtimeSlider" min="20" max="150" step="5" value="150">
+      <div class="runtime-ticks"><span>20m</span><span>150m+</span></div>
+    </div>
+    <button class="apply-btn" id="applyFilters">Show results</button>
+  </div>
+
+  <div class="sheet-backdrop" id="sortBackdrop"></div>
+  <div class="sheet" id="sortSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Sort by</div>
+    <div class="sort-options" id="sortOptions"></div>
+  </div>
+
+  <div class="sheet-backdrop" id="ratingBackdrop"></div>
+  <div class="sheet" id="ratingSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Show rating</div>
+    <div class="sort-options" id="ratingOptions"></div>
+  </div>
+
+</div>
+
+<script src="scoring.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// Catalog. Precomputed by build_catalog.js: the Impurity Score and the
+// Miscibility phrase are already baked in by the shared scoring.js engine, so
+// this app ships with no API keys and no proxy — it just reads a static JSON
+// file. Every filter, bound and chip below derives from whatever titles the
+// catalog actually contains, so a catalog refresh needs no code change.
+//
+// Record shape (nulls are meaningful, not missing data):
+//   { title, year, runtime, genre, is, misc, newThisMonth, poster,
+//     sources: { imdb, rt, mc, letterboxd, tmdb } }
+//   is:null + sources:null -> "Not enough ratings yet" (insufficient data)
+//   misc:null              -> no MI phrase (critic/audience too close to call,
+//                             or no critic aggregate at all) — tier shows alone
+//   sources.<key>:null     -> that one source has no rating; others still show
+// ---------------------------------------------------------------------------
+let MOVIES = [];
+const CATALOG_URL = 'catalog.json';
+
+
+// Tier thresholds (Acclaimed/Liked/Mixed/Panned cutoffs) come from
+// scoring.js (Scoring.scoreTierName), shared with Impure Cinema. Only the
+// color mapping below (tierColor) is Seatback's own Passport Plum ramp.
+function tierOf(is){
+  if (is == null) return null;
+  return Scoring.scoreTierName(is);
+}
+// Panned/Mixed darkened significantly vs. the original ramp so the bottom
+// two tiers read as visibly muted/receding, not just "less saturated."
+function tierColor(tier){
+  return { Acclaimed:"#B48EEA", Liked:"#8F68C4", Mixed:"#4A3468", Panned:"#33234E" }[tier] || "var(--hairline)";
+}
+
+// Which rating a title's badge/ring currently displays, and what the sort
+// menu's "Rating" option sorts by — one shared setting driving both.
+const RATING_OPTIONS = {
+  is:         { label:"Impurity Score", short:"IC",   sub:"Weighted blend of all sources" },
+  rt:         { label:"Rotten Tomatoes", short:"RT",   sub:"Critics, RT scale" },
+  imdb:       { label:"IMDb",            short:"IMDb", sub:"Audience, IMDb scale" },
+  metacritic: { label:"Metacritic",      short:"MC",   sub:"Critics, Metascore" },
+  letterboxd: { label:"Letterboxd",      short:"LB",   sub:"Audience, film-literate" },
+  tmdb:       { label:"TMDB",            short:"TMDB", sub:"Audience, general" },
+};
+let currentRating = 'is';
+
+// Normalized 0-100 value for whichever rating is selected — used for both
+// ring fill/tier color and as the sort key, so the two always agree.
+function ratingPct(m, key){
+  if (key === 'is') return m.is;
+  const s = m.sources;
+  if (!s) return null;
+  // Each source can independently be null (e.g. no Metacritic for a small
+  // foreign title). Return null, never 0 — a missing rating must read as
+  // "no score", not as a rock-bottom one, in both the ring and the sort.
+  if (key === 'rt')         return s.rt         == null ? null : s.rt;
+  if (key === 'imdb')       return s.imdb       == null ? null : s.imdb * 10;
+  if (key === 'metacritic') return s.mc         == null ? null : s.mc;
+  if (key === 'letterboxd') return s.letterboxd == null ? null : s.letterboxd * 20;
+  if (key === 'tmdb')       return s.tmdb       == null ? null : s.tmdb * 10;
+  return null;
+}
+// Native display value (the units that source actually uses), for the
+// number shown inside the ring — separate from the pct used for fill/sort.
+function ratingDisplayValue(m, key){
+  if (key === 'is') return m.is;
+  const s = m.sources;
+  if (!s) return null;
+  if (key === 'rt')         return s.rt         == null ? null : Math.round(s.rt);
+  if (key === 'imdb')       return s.imdb       == null ? null : s.imdb.toFixed(1);
+  if (key === 'metacritic') return s.mc         == null ? null : Math.round(s.mc);
+  if (key === 'letterboxd') return s.letterboxd == null ? null : s.letterboxd.toFixed(1);
+  if (key === 'tmdb')       return s.tmdb       == null ? null : s.tmdb.toFixed(1);
+  return null;
+}
+
+function miniRing(value, pct, label){
+  // Same rule as Impure Cinema's breakdown: neutral gray, tier-acclaimed
+  // plum only when that individual source itself scores 85+.
+  const color = pct >= 85 ? '#B48EEA' : 'var(--text-dim)';
+  const r = 11, c = 2*Math.PI*r, offset = c - (Math.max(0,Math.min(100,pct))/100)*c;
+  return `<div class="bd-item">
+    <div class="bd-mini-ring">
+      <svg viewBox="0 0 28 28"><circle class="mini-track" cx="14" cy="14" r="${r}"/>
+        <circle class="mini-fill" cx="14" cy="14" r="${r}" stroke="${color}" stroke-dasharray="${c}" stroke-dashoffset="${offset}"/></svg>
+    </div>
+    <div class="bd-mini-label">${label}</div>
+    <div class="bd-mini-score">${value}</div>
+  </div>`;
+}
+
+// The and/but conjunction rule and the "Panned"+"Panned by All" collision
+// fix live in scoring.js (Scoring.buildVerdictParts), shared with Impure
+// Cinema. Seatback's fake data currently hand-sets m.misc directly rather
+// than deriving it from a real computeVerdict() classification — once real
+// per-source data lands (Phase 1), this can call Scoring.phraseForVerdict()
+// on a real verdict object instead, with no change to this function.
+function buildBreakdownVerdict(m){
+  const tier = tierOf(m.is);
+  const parts = Scoring.buildVerdictParts(tier, m.misc);
+  if (!parts) return '';
+  const tc = tierColor(tier);
+  if (parts.onlyTier){
+    return `<div class="bd-verdict"><span style="color:${tc}">${parts.tierWord}</span></div>`;
+  }
+  if (parts.collapsed){
+    return `<div class="bd-verdict"><span style="color:${tc}">${parts.miscWord}</span></div>`;
+  }
+  const miscSpan = parts.miscTierColored
+    ? `<span style="color:${tc}">${parts.miscWord}</span>`
+    : `<span class="misc-word">${parts.miscWord}</span>`;
+  return `<div class="bd-verdict"><span style="color:${tc}">${parts.tierWord}</span><span class="conj">${parts.conjWord}</span>${miscSpan}</div>`;
+}
+
+function breakdownPanel(m){
+  if (!m.sources){
+    return `<div class="row-breakdown"><div class="bd-empty">Not enough ratings yet for a breakdown.</div></div>`;
+  }
+  const s = m.sources;
+  // A source with no rating is omitted from the strip rather than shown as a
+  // zero ring — an empty ring would read as "everyone hated it".
+  const items = [
+    s.imdb       == null ? '' : miniRing(s.imdb.toFixed(1),       s.imdb * 10,       'IMDb'),
+    s.rt         == null ? '' : miniRing(Math.round(s.rt),        s.rt,              'RT'),
+    s.mc         == null ? '' : miniRing(Math.round(s.mc),        s.mc,              'MC'),
+    s.letterboxd == null ? '' : miniRing(s.letterboxd.toFixed(1), s.letterboxd * 20, 'LB'),
+    s.tmdb       == null ? '' : miniRing(s.tmdb.toFixed(1),       s.tmdb * 10,       'TMDB'),
+  ].join('');
+  if (!items){
+    return `<div class="row-breakdown"><div class="bd-empty">Not enough ratings yet for a breakdown.</div></div>`;
+  }
+  return `<div class="row-breakdown">${buildBreakdownVerdict(m)}<div class="bd-strip">${items}</div></div>`;
+}
+function scoreBadge(m){
+  const pct = ratingPct(m, currentRating);
+  if (pct == null) return `<div class="score-badge" tabindex="0" role="button" aria-label="Score breakdown"><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="17"/></svg><div class="num" style="color:var(--text-faint)">–</div></div>`;
+  const value = ratingDisplayValue(m, currentRating);
+  const tier = tierOf(pct), color = tierColor(tier);
+  const r = 17, c = 2*Math.PI*r, offset = c - (Math.max(0, Math.min(100, pct))/100)*c;
+  return `<div class="score-badge" tabindex="0" role="button" aria-label="Score breakdown">
+    <svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="${r}"/>
+      <circle class="fill" cx="20" cy="20" r="${r}" stroke="${color}" stroke-dasharray="${c}" stroke-dashoffset="${offset}"/></svg>
+    <div class="num">${value}</div>
+  </div>`;
+}
+
+function renderRow(m, highlightQuery){
+  let titleHtml = m.title;
+  if (highlightQuery){
+    const idx = m.title.toLowerCase().indexOf(highlightQuery.toLowerCase());
+    if (idx !== -1){
+      titleHtml = m.title.slice(0, idx) + '<mark>' + m.title.slice(idx, idx + highlightQuery.length) + '</mark>' + m.title.slice(idx + highlightQuery.length);
+    }
+  }
+  // Any of year / genre / runtime can be absent for obscure titles; drop the
+  // field rather than printing "null" or "nullm".
+  const meta = [
+    m.year    != null ? `<span>${m.year}</span>`      : '',
+    m.genre   ? `<span>${m.genre}</span>`             : '',
+    m.runtime != null ? `<span>${m.runtime}m</span>`  : '',
+  ].join('');
+  const thumb = m.poster
+    ? `<img class="thumb" src="${m.poster}" alt="" loading="lazy">`
+    : `<div class="thumb thumb-empty" aria-hidden="true"></div>`;
+  return `<div class="row-wrapper">
+    <div class="row">
+      ${thumb}
+      <div class="row-info">
+        <div class="row-title">${titleHtml}${m.newThisMonth ? '<span class="new-pill">New</span>' : ''}</div>
+        <div class="row-meta">${meta}</div>
+      </div>
+      ${scoreBadge(m)}
+    </div>
+    ${breakdownPanel(m)}
+  </div>`;
+}
+
+const SORT_OPTIONS = {
+  rating:  { label:"Rating",       compare:(a,b) => (ratingPct(b, currentRating) ?? -1) - (ratingPct(a, currentRating) ?? -1) },
+  runtime: { label:"Runtime",      sub:"Shortest first", compare:(a,b) => (a.runtime ?? Infinity) - (b.runtime ?? Infinity) },
+  alpha:   { label:"Alphabetical", sub:"A to Z",         compare:(a,b) => a.title.localeCompare(b.title) },
+};
+let currentSort = 'rating';
+
+const sortOptionsEl = document.getElementById('sortOptions');
+function renderSortOptions(){
+  sortOptionsEl.innerHTML = Object.entries(SORT_OPTIONS).map(([key, o]) => {
+    const sub = key === 'rating' ? `Currently: ${RATING_OPTIONS[currentRating].label}` : o.sub;
+    return `<div class="sort-option${key === currentSort ? ' selected' : ''}" data-key="${key}" tabindex="0" role="button">
+      <span>${o.label}<span class="sub">${sub}</span></span>
+      <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>`;
+  }).join('');
+}
+renderSortOptions();
+
+function sortMovies(list){
+  return [...list].sort(SORT_OPTIONS[currentSort].compare);
+}
+
+const sortSheet = document.getElementById('sortSheet');
+const sortBackdrop = document.getElementById('sortBackdrop');
+document.getElementById('openSort').addEventListener('click', () => { sortSheet.classList.add('open'); sortBackdrop.classList.add('open'); });
+sortBackdrop.addEventListener('click', () => { sortSheet.classList.remove('open'); sortBackdrop.classList.remove('open'); });
+sortOptionsEl.addEventListener('click', (e) => {
+  const opt = e.target.closest('.sort-option');
+  if (!opt) return;
+  currentSort = opt.dataset.key;
+  renderSortOptions();
+  document.getElementById('sortLabel').textContent = SORT_OPTIONS[currentSort].label;
+  applyFiltersToResults();
+  sortSheet.classList.remove('open');
+  sortBackdrop.classList.remove('open');
+});
+
+// Rating picker — controls which source's number/ring shows on every row,
+// and (when sort is set to "Rating") what the list is ordered by.
+const ratingOptionsEl = document.getElementById('ratingOptions');
+function renderRatingOptions(){
+  ratingOptionsEl.innerHTML = Object.entries(RATING_OPTIONS).map(([key, o]) => `
+    <div class="sort-option${key === currentRating ? ' selected' : ''}" data-key="${key}" tabindex="0" role="button">
+      <span>${o.label}<span class="sub">${o.sub}</span></span>
+      <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>`).join('');
+}
+renderRatingOptions();
+
+const ratingSheet = document.getElementById('ratingSheet');
+const ratingBackdrop = document.getElementById('ratingBackdrop');
+document.getElementById('openRating').addEventListener('click', () => { ratingSheet.classList.add('open'); ratingBackdrop.classList.add('open'); });
+ratingBackdrop.addEventListener('click', () => { ratingSheet.classList.remove('open'); ratingBackdrop.classList.remove('open'); });
+ratingOptionsEl.addEventListener('click', (e) => {
+  const opt = e.target.closest('.sort-option');
+  if (!opt) return;
+  currentRating = opt.dataset.key;
+  renderRatingOptions();
+  renderSortOptions(); // "Rating" row's sub-label depends on currentRating
+  document.getElementById('ratingLabel').textContent = RATING_OPTIONS[currentRating].short;
+  applyFiltersToResults(); // re-render badges with the new rating + re-sort if needed
+  ratingSheet.classList.remove('open');
+  ratingBackdrop.classList.remove('open');
+});
+
+// Tap a score badge to expand/collapse its breakdown (5-source mini-ring
+// strip + MI verdict line). Row taps otherwise do nothing — there's no
+// detail view; the row + breakdown is the whole story for this app.
+['results', 'searchResults', 'newResults'].forEach(id => {
+  document.getElementById(id).addEventListener('click', (e) => {
+    const badge = e.target.closest('.score-badge');
+    if (!badge) return;
+    e.stopPropagation();
+    const panel = badge.closest('.row-wrapper').querySelector('.row-breakdown');
+    panel.classList.toggle('open');
+  });
+});
+
+function renderNew(){
+  const newList = MOVIES.filter(m => m.newThisMonth);
+  document.getElementById('newResults').innerHTML = newList.length
+    ? newList.map(m => renderRow(m)).join('')
+    : `<div class="empty">Nothing new yet this month.</div>`;
+}
+
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+function renderSearch(q){
+  if (!q){ searchResults.innerHTML = MOVIES.map(m => renderRow(m)).join(''); return; }
+  const matches = MOVIES.filter(m => m.title.toLowerCase().includes(q.toLowerCase()));
+  searchResults.innerHTML = matches.length
+    ? matches.map(m => renderRow(m, q)).join('')
+    : `<div class="empty">No matches in this flight's catalog for "${q}".</div>`;
+}
+searchInput.addEventListener('input', () => renderSearch(searchInput.value.trim()));
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('browsePane').style.display = tab.dataset.tab === 'browse' ? '' : 'none';
+    document.getElementById('searchPane').style.display = tab.dataset.tab === 'search' ? '' : 'none';
+    document.getElementById('newPane').style.display = tab.dataset.tab === 'new' ? '' : 'none';
+  });
+});
+
+const sheet = document.getElementById('filterSheet');
+const backdrop = document.getElementById('sheetBackdrop');
+document.getElementById('openFilters').addEventListener('click', () => { sheet.classList.add('open'); backdrop.classList.add('open'); });
+backdrop.addEventListener('click', () => { sheet.classList.remove('open'); backdrop.classList.remove('open'); });
+document.getElementById('clearFilters').addEventListener('click', () => {
+  document.querySelectorAll('.chip.selected').forEach(c => c.classList.remove('selected'));
+  runtimeSlider.value = RUNTIME_MAX;
+  updateRuntimeLabel();
+});
+
+// Runtime bounds come from the catalog, rounded outward to the nearest 5 so
+// the slider ends land on clean numbers and the max always includes the
+// longest film on the flight.
+let RUNTIME_MIN = 20, RUNTIME_MAX = 150;
+const runtimeSlider = document.getElementById('runtimeSlider');
+const runtimeLabel = document.getElementById('runtimeLabel');
+
+function applyRuntimeBounds(){
+  const times = MOVIES.map(m => m.runtime).filter(v => v != null && v > 0);
+  if (times.length){
+    RUNTIME_MIN = Math.max(5, Math.floor(Math.min(...times) / 5) * 5);
+    RUNTIME_MAX = Math.ceil(Math.max(...times) / 5) * 5;
+    if (RUNTIME_MAX <= RUNTIME_MIN) RUNTIME_MAX = RUNTIME_MIN + 5;
+  }
+  runtimeSlider.min = RUNTIME_MIN;
+  runtimeSlider.max = RUNTIME_MAX;
+  runtimeSlider.value = RUNTIME_MAX;
+  const ticks = document.querySelector('.runtime-ticks');
+  if (ticks) ticks.innerHTML = `<span>${RUNTIME_MIN}m</span><span>${RUNTIME_MAX}m+</span>`;
+}
+
+// Chips are built from what's actually in the catalog — no chip for a genre or
+// verdict no film on this flight has, and no missing chip when the catalog
+// contains one the old hardcoded list didn't (e.g. "In Agreement").
+const TIER_ORDER = ['Acclaimed', 'Liked', 'Mixed', 'Panned'];
+const MISC_ORDER = ['Loved by All', 'In Agreement', "Critics' Film", "Audience's Film", 'Panned by All'];
+
+function buildChips(){
+  const esc = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const fill = (group, values) => {
+    const row = document.querySelector(`.chip-row[data-group="${group}"]`);
+    if (!row) return;
+    row.innerHTML = values
+      .map(v => `<div class="chip" data-val="${esc(v)}" tabindex="0" role="button">${esc(v)}</div>`)
+      .join('');
+    // Hide the whole group if this catalog gives it nothing to filter on.
+    const grp = row.closest('.filter-group');
+    if (grp) grp.style.display = values.length ? '' : 'none';
+  };
+
+  const genres = [...new Set(MOVIES.map(m => m.genre).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+  const tiers  = TIER_ORDER.filter(t => MOVIES.some(m => tierOf(m.is) === t));
+  const miscs  = MISC_ORDER.filter(p => MOVIES.some(m => m.misc === p));
+
+  fill('genre', genres);
+  fill('tier',  tiers);
+  fill('misc',  miscs);
+
+  document.querySelectorAll('.chip').forEach(chip =>
+    chip.addEventListener('click', () => chip.classList.toggle('selected')));
+}
+function updateRuntimeLabel(){
+  const v = Number(runtimeSlider.value);
+  runtimeLabel.innerHTML = v >= RUNTIME_MAX
+    ? `No limit — show everything`
+    : `Fits in <strong>${v} min</strong> or less<span class="hint">Movies longer than your remaining flight time are hidden</span>`;
+}
+runtimeSlider.addEventListener('input', updateRuntimeLabel);
+
+function selectedVals(group){
+  return [...document.querySelectorAll(`.chip-row[data-group="${group}"] .chip.selected`)].map(c => c.dataset.val);
+}
+
+function applyFiltersToResults(){
+  const genres = selectedVals('genre');
+  const tiers = selectedVals('tier');
+  const miscs = selectedVals('misc');
+  const runtimeCap = Number(runtimeSlider.value);
+
+  const filtered = sortMovies(MOVIES.filter(m => {
+    if (genres.length && !genres.includes(m.genre)) return false;
+    if (tiers.length && !tiers.includes(tierOf(m.is))) return false;
+    if (miscs.length && !(m.misc && miscs.includes(m.misc))) return false;
+    if (runtimeCap < RUNTIME_MAX && m.runtime > runtimeCap) return false;
+    return true;
+  }));
+
+  document.getElementById('results').innerHTML = filtered.length
+    ? filtered.map(m => renderRow(m)).join('')
+    : `<div class="empty">No titles on this flight match those filters.</div>`;
+
+  const activeCount = genres.length + tiers.length + miscs.length + (runtimeCap < RUNTIME_MAX ? 1 : 0);
+  const badge = document.getElementById('filterCount');
+  badge.style.display = activeCount ? 'inline' : 'none';
+  badge.textContent = activeCount;
+}
+
+document.getElementById('applyFilters').addEventListener('click', () => {
+  applyFiltersToResults();
+  sheet.classList.remove('open');
+  backdrop.classList.remove('open');
+});
+
+// ---------------------------------------------------------------------------
+// Boot. Everything above is pure setup; nothing renders until the catalog is
+// in hand. The catalog is a static file served alongside the app, so on a
+// plane this comes from the service worker cache, not the network.
+// ---------------------------------------------------------------------------
+function renderAll(){
+  applyRuntimeBounds();
+  updateRuntimeLabel();
+  buildChips();
+  applyFiltersToResults();  // browse pane, default sort + no filters
+  renderSearch('');
+  renderNew();
+}
+
+function showFatal(msg){
+  document.getElementById('results').innerHTML =
+    `<div class="empty">${msg}</div>`;
+}
+
+async function loadCatalog(){
+  try {
+    const res = await fetch(CATALOG_URL, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) throw new Error('empty catalog');
+    MOVIES = data;
+    renderAll();
+    warmPosters();
+  } catch (err) {
+    console.error('Catalog load failed:', err);
+    // Offline with no cached copy is the realistic failure on a plane, so say
+    // something a passenger can act on rather than surfacing an error code.
+    showFatal("Couldn't load this flight's catalog. Reconnect for a moment and reopen the app.");
+  }
+}
+
+// Offline support. The service worker caches the app shell and catalog so a
+// launch with no connectivity still renders everything; posters are warmed in
+// the background so they're already local by the time the plane doors close.
+function warmPosters(){
+  if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+  const urls = MOVIES.map(m => m.poster).filter(Boolean);
+  if (urls.length) navigator.serviceWorker.controller.postMessage({ type: 'WARM_POSTERS', urls });
+}
+
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(() => {
+        // On a first visit the worker isn't controlling the page yet, so the
+        // warm-up above would no-op; run it once control is handed over.
+        if (!navigator.serviceWorker.controller){
+          navigator.serviceWorker.addEventListener('controllerchange', warmPosters, { once: true });
+        }
+      })
+      .catch(err => console.warn('Service worker registration failed:', err));
+  });
+}
+
+document.getElementById('results').innerHTML = `<div class="empty">Loading this flight's catalog…</div>`;
+loadCatalog();
+
+// Keyboard parity: Enter/Space activate any custom (div-based) control the
+// same way a click would, since role="button" alone doesn't give that for free.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target.closest('[role="button"]');
+  if (!el) return;
+  e.preventDefault();
+  el.click();
+});
+</script>
+</body>
+</html>
