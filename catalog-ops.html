@@ -1,0 +1,441 @@
+<meta charset="UTF-8">
+<title>Seatback Cinema — Catalog Ops</title>
+<style>
+  :root{
+    --bg:#0B0B0D; --surface:#17171B; --surface-2:#1F1F24; --surface-3:#26262D;
+    --hairline:#2A2A30; --hairline-soft:#201F26;
+    --text:#F2F1ED; --text-dim:#9291A8; --text-faint:#5A5A60;
+    --accent:#8F68C4; --accent-bright:#B48EEA; --accent-wash:rgba(143,104,196,0.14);
+    --good:#6FBF8B; --good-wash:rgba(111,191,139,0.13);
+    --warn:#E0A952; --warn-wash:rgba(224,169,82,0.14);
+    --miss:#D97D6C; --miss-wash:rgba(217,125,108,0.14);
+    --radius:14px;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  /* Seatback Cinema is a single deliberate visual world — a dimmed cabin
+     screen at cruising altitude — so this companion ops panel commits to
+     the same dark register rather than offering a light inversion. */
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  a{ color:inherit; }
+  button{ font-family:inherit; }
+
+  ::selection{ background:var(--accent-wash); color:var(--text); }
+
+  .page{ max-width:760px; margin:0 auto; padding:48px 24px 80px; }
+
+  /* ---------- Masthead ---------- */
+  .masthead{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:6px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand svg{ width:30px; height:30px; flex-shrink:0; }
+  .brand-text h1{ margin:0; font-size:19px; font-weight:800; letter-spacing:-0.01em; }
+  .brand-text p{ margin:2px 0 0; font-size:12.5px; color:var(--text-dim); }
+  .brand-links{ display:flex; gap:14px; font-size:12px; color:var(--text-dim); }
+  .brand-links a{ text-decoration:none; border-bottom:1px solid transparent; transition:border-color .15s, color .15s; }
+  .brand-links a:hover{ color:var(--accent-bright); border-color:var(--accent-bright); }
+
+  hr.rule{ border:none; border-top:1px solid var(--hairline); margin:28px 0; }
+
+  /* ---------- Status strip (departure-board register) ---------- */
+  .strip{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+    background:var(--hairline); border:1px solid var(--hairline); border-radius:var(--radius);
+    overflow:hidden; margin-top:26px;
+  }
+  .stat{ background:var(--surface); padding:16px 14px; min-width:0; }
+  .stat-label{ font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--text-faint); margin:0 0 8px; }
+  .stat-value{ font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:17px; font-weight:600; color:var(--text); line-height:1.25; }
+  .stat-value small{ display:block; font-family:var(--sans); font-size:11px; font-weight:500; color:var(--text-dim); margin-top:3px; }
+  .stat-value.good{ color:var(--good); }
+  @media (max-width:620px){ .strip{ grid-template-columns:repeat(2,1fr); } }
+
+  /* ---------- Ticket-stub divider ---------- */
+  .stub-tear{
+    height:1px; margin:36px 0; position:relative;
+    background-image:repeating-linear-gradient(to right, var(--hairline) 0 6px, transparent 6px 12px);
+  }
+  .stub-tear::before, .stub-tear::after{
+    content:""; position:absolute; top:50%; width:16px; height:16px; border-radius:50%;
+    background:var(--bg); transform:translateY(-50%); border:1px solid var(--hairline);
+  }
+  .stub-tear::before{ left:-24px; }
+  .stub-tear::after{ right:-24px; }
+
+  /* ---------- Section shell ---------- */
+  section{ margin-top:8px; }
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  .section-head h2{ margin:0; font-size:14.5px; font-weight:700; }
+  .section-head .count-chip{
+    font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text-dim);
+    background:var(--surface); border:1px solid var(--hairline); border-radius:20px; padding:2px 9px;
+  }
+  .section-sub{ margin:-8px 0 18px; font-size:12.5px; color:var(--text-dim); line-height:1.5; max-width:56ch; }
+
+  /* ---------- Action card ---------- */
+  .action-card{
+    background:var(--surface); border:1px solid var(--hairline); border-radius:var(--radius);
+    padding:20px 22px; display:flex; align-items:center; justify-content:space-between; gap:20px;
+  }
+  .action-card p{ margin:6px 0 0; font-size:12.5px; color:var(--text-dim); line-height:1.55; max-width:42ch; }
+  .action-card h3{ margin:0; font-size:15px; font-weight:700; }
+  @media (max-width:560px){ .action-card{ flex-direction:column; align-items:stretch; } }
+
+  button.btn{
+    flex-shrink:0; appearance:none; cursor:pointer;
+    font-size:13px; font-weight:700; border-radius:10px; padding:11px 18px;
+    display:inline-flex; align-items:center; gap:8px; transition:transform .12s ease, background .15s, opacity .15s;
+  }
+  button.btn:active{ transform:scale(0.97); }
+  button.btn:disabled{ cursor:default; }
+  button.btn:focus-visible{ outline:2px solid var(--accent-bright); outline-offset:2px; }
+
+  .btn-primary{ background:var(--accent); color:#0B0B0D; border:none; }
+  .btn-primary:hover:not(:disabled){ background:var(--accent-bright); }
+  .btn-primary.sent{ background:var(--good); color:#0B0B0D; }
+
+  .btn-ghost{
+    background:transparent; color:var(--text); border:1px solid var(--hairline);
+    padding:8px 13px; font-size:12.5px;
+  }
+  .btn-ghost:hover:not(:disabled){ border-color:var(--accent); color:var(--accent-bright); }
+  .btn-ghost.sent{ border-color:var(--good); color:var(--good); }
+
+  .spinner{
+    width:13px; height:13px; border-radius:50%; border:2px solid rgba(11,11,13,0.3);
+    border-top-color:#0B0B0D; animation:spin .7s linear infinite; display:none;
+  }
+  button.loading .spinner{ display:inline-block; }
+  button.loading .btn-label{ opacity:0.85; }
+  @media (prefers-reduced-motion:reduce){ .spinner{ animation:none; } button.btn{ transition:none; } }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  /* ---------- All-clear state ---------- */
+  .all-clear{
+    background:var(--good-wash); border:1px solid rgba(111,191,139,0.3); border-radius:var(--radius);
+    padding:22px; display:flex; align-items:center; gap:16px;
+  }
+  .all-clear .mark{
+    width:38px; height:38px; border-radius:50%; background:rgba(111,191,139,0.18);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .all-clear .mark svg{ width:18px; height:18px; }
+  .all-clear h3{ margin:0 0 3px; font-size:14.5px; font-weight:700; color:var(--good); }
+  .all-clear p{ margin:0; font-size:12.5px; color:var(--text-dim); line-height:1.5; }
+
+  /* ---------- Flagged title cards ---------- */
+  .flag-card{
+    background:var(--surface); border:1px solid var(--hairline); border-radius:var(--radius);
+    padding:18px 20px; margin-bottom:12px;
+  }
+  .flag-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+  .flag-title{ font-size:15px; font-weight:700; }
+  .flag-year{ color:var(--text-faint); font-weight:500; }
+  .tier{
+    font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;
+    border-radius:6px; padding:3px 7px; flex-shrink:0; white-space:nowrap;
+  }
+  .tier-review, .tier-fuzzy{ background:var(--warn-wash); color:var(--warn); }
+  .tier-miss{ background:var(--miss-wash); color:var(--miss); }
+  .flag-note{ font-size:12.5px; color:var(--text-dim); margin-top:6px; line-height:1.5; }
+  .flag-guess{
+    margin-top:12px; padding:10px 12px; background:var(--surface-2); border-radius:9px;
+    font-size:12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  }
+  .flag-guess a{ color:var(--accent-bright); text-decoration:none; }
+  .flag-guess a:hover{ text-decoration:underline; }
+  .flag-actions{ margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .flag-actions input{
+    background:var(--surface-2); border:1px solid var(--hairline); border-radius:8px;
+    color:var(--text); font-family:var(--mono); font-size:12.5px; padding:8px 10px; width:120px;
+  }
+  .flag-actions input::placeholder{ color:var(--text-faint); font-family:var(--sans); }
+  .flag-actions input:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
+  .flag-actions form{ display:flex; gap:8px; align-items:center; }
+
+  /* Appears when the Clipboard API is blocked in this page's sandbox —
+     the text is pre-selected, so a plain Cmd/Ctrl+C copies it. Styled as
+     an intentional "here it is" reveal, not an error box. */
+  .copy-fallback{ width:100%; margin-top:10px; }
+  .copy-fallback-label{
+    margin:0 0 6px; font-size:10px; font-weight:700; letter-spacing:0.05em;
+    text-transform:uppercase; color:var(--text-faint);
+  }
+  .copy-fallback-text{
+    padding:10px 12px; background:var(--surface-2); border:1px solid var(--accent);
+    border-radius:9px; font-family:var(--mono); font-size:11.5px; color:var(--text);
+    user-select:all; word-break:break-word; cursor:text;
+  }
+
+  /* ---------- Footer ---------- */
+  footer{ margin-top:44px; font-size:11.5px; color:var(--text-faint); line-height:1.7; }
+  footer a{ color:var(--text-dim); text-decoration:underline; text-decoration-color:var(--hairline); }
+  footer a:hover{ color:var(--accent-bright); text-decoration-color:var(--accent-bright); }
+</style>
+
+<div class="page">
+
+  <div class="masthead">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" fill="none" stroke="#F2F1ED" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="12" y="14" width="40" height="36" rx="8"/>
+        <rect x="17" y="19" width="30" height="26" rx="5" opacity="0.35"/>
+        <rect x="30" y="30" width="13" height="10" rx="2.5" fill="#8F68C4" stroke="none"/>
+      </svg>
+      <div class="brand-text">
+        <h1>Catalog Ops</h1>
+        <p>Seatback Cinema — membership sync dashboard</p>
+      </div>
+    </div>
+    <div class="brand-links">
+      <a href="https://github.com/neilashah/seatback-cinema" target="_blank" rel="noopener">Repo</a>
+      <a href="https://neilashah.github.io/seatback-cinema/" target="_blank" rel="noopener">Live app</a>
+    </div>
+  </div>
+
+  <div class="strip">
+    <div class="stat">
+      <p class="stat-label">Titles live</p>
+      <p class="stat-value">189</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Last scrape check</p>
+      <p class="stat-value">1:08 PM<small>Jul 25, local</small></p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Last membership change</p>
+      <p class="stat-value">12:16 PM<small>Jul 25 · 189 titles</small></p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Local schedule</p>
+      <p class="stat-value good">Loaded<small>Daily · 9:00 AM</small></p>
+    </div>
+  </div>
+
+  <div class="stub-tear"></div>
+
+  <section>
+    <div class="section-head"><h2>Check for updates</h2></div>
+    <div class="action-card">
+      <div>
+        <h3>Run the catalog scrape check now</h3>
+        <p>Normally runs on its own every morning. Copy the instruction below and paste it into a Claude Code chat to run it right now instead of waiting — scrapes Em's Letterboxd list, and only pushes (kicking off the TMDB match + deploy) if it actually changed.</p>
+      </div>
+      <button class="btn btn-primary" id="runScrapeBtn">
+        <span class="spinner"></span>
+        <span class="btn-label">Copy instruction</span>
+      </button>
+    </div>
+  </section>
+
+  <section style="margin-top:36px;">
+    <div class="section-head">
+      <h2>Needs your review</h2>
+      <span class="count-chip" id="flagCount">0 flagged</span>
+    </div>
+    <p class="section-sub">Titles the TMDB matcher wasn't confident enough to add on its own — held out of the catalog until you bless a match or pin the correct one. This list is a snapshot from when this page was last published; ask Claude to refresh it for the current state.</p>
+
+    <div id="flagList"></div>
+    <div class="all-clear" id="allClear">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#6FBF8B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div>
+        <h3>Nothing waiting on you</h3>
+        <p>Every title in the last sync matched TMDB cleanly. New flagged titles will show up here after the next scrape finds something ambiguous.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Buttons here copy a ready-to-paste instruction to your clipboard — paste it into a Claude Code chat and Claude does the actual work (running the script, editing <code>overrides.csv</code>, committing). This page can't run anything or message a chat on its own, and its data is a snapshot from publish time, not live.
+    </p>
+    <p>
+      Background on why the scrape runs locally instead of in CI: <a href="https://github.com/neilashah/seatback-cinema/issues/1" target="_blank" rel="noopener">issue #1</a>.
+    </p>
+  </footer>
+
+</div>
+
+<script>
+  // Real flagged-title data, if any, is embedded here at publish time by
+  // Claude (from the catalog-needs-review GitHub issue / flagged.txt).
+  // Empty right now — everything matched cleanly as of the last sync.
+  const FLAGGED = [];
+
+  // Every action is wired up via addEventListener after rendering, never
+  // via inline onclick="..." attributes. An earlier version built onclick
+  // strings with JSON.stringify(...) embedded in a double-quoted HTML
+  // attribute — the JSON string's own double quotes closed the attribute
+  // early and silently truncated it, so the button did nothing at all.
+  // Attaching listeners in JS sidesteps that whole class of bug: the
+  // message text is passed as a real JS value, never round-tripped through
+  // HTML attribute syntax.
+  function renderFlagged(){
+    const list = document.getElementById('flagList');
+    const allClear = document.getElementById('allClear');
+    const count = document.getElementById('flagCount');
+    count.textContent = FLAGGED.length + ' flagged';
+
+    if (!FLAGGED.length){
+      allClear.style.display = 'flex';
+      list.style.display = 'none';
+      return;
+    }
+    allClear.style.display = 'none';
+    list.style.display = 'block';
+
+    list.innerHTML = FLAGGED.map((f, i) => {
+      const tierClass = f.tier === 'miss' ? 'tier-miss' : (f.tier === 'fuzzy' ? 'tier-fuzzy' : 'tier-review');
+      const guess = f.guessId ? `
+        <div class="flag-guess">
+          <span>Matcher's best guess: <strong>${escapeHtml(f.guessTitle)}</strong> (${escapeHtml(f.guessYear || '—')})</span>
+          <a href="https://www.themoviedb.org/movie/${encodeURIComponent(f.guessId)}" target="_blank" rel="noopener">View on TMDB →</a>
+        </div>` : '';
+      const blessBtn = f.guessId ? `
+        <button class="btn btn-ghost" data-bless="${i}">
+          <span class="spinner"></span><span class="btn-label">Bless this match</span>
+        </button>` : '';
+
+      return `
+        <div class="flag-card">
+          <div class="flag-top">
+            <div class="flag-title">${escapeHtml(f.title)} <span class="flag-year">${escapeHtml(f.year || '')}</span></div>
+            <span class="tier ${tierClass}">${escapeHtml(f.tier)}</span>
+          </div>
+          <div class="flag-note">${escapeHtml(f.note)}</div>
+          ${guess}
+          <div class="flag-actions">
+            ${blessBtn}
+            <a class="btn btn-ghost" href="https://www.themoviedb.org/search?query=${encodeURIComponent(f.title)}" target="_blank" rel="noopener" style="text-decoration:none;">Search TMDB</a>
+            <form data-override-form="${i}">
+              <input type="text" inputmode="numeric" placeholder="TMDB id" id="tmdbInput-${i}" />
+              <button class="btn btn-ghost" type="submit">
+                <span class="spinner"></span><span class="btn-label">Set correct match</span>
+              </button>
+            </form>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('[data-bless]').forEach(btn => {
+      const f = FLAGGED[Number(btn.dataset.bless)];
+      btn.addEventListener('click', () => {
+        sendAction(btn, `Add an override: bless "${f.title}" to tmdb:${f.guessId} — confirmed correct.`);
+      });
+    });
+
+    list.querySelectorAll('[data-override-form]').forEach(form => {
+      const i = Number(form.dataset.overrideForm);
+      form.addEventListener('submit', (evt) => {
+        evt.preventDefault();
+        const input = document.getElementById('tmdbInput-' + i);
+        const id = (input.value || '').trim();
+        if (!id) { input.focus(); return; }
+        const f = FLAGGED[i];
+        sendAction(form.querySelector('button'), `Add an override: "${f.title}" -> tmdb:${id}.`);
+      });
+    });
+  }
+
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // There's no way for a published Artifact page to message back into a
+  // specific chat conversation — that's a different tool's mechanism
+  // entirely. The honest version of "one-click action" this page can
+  // actually do is: copy a ready-to-paste instruction, which you paste
+  // into a Claude Code chat yourself.
+  function copyToClipboard(text){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      return navigator.clipboard.writeText(text);
+    }
+    // Fallback for contexts without the async Clipboard API.
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok ? Promise.resolve() : Promise.reject(new Error('copy failed'));
+  }
+
+  // Published Artifacts run in a sandboxed iframe, and clipboard-write
+  // permission there isn't guaranteed — it depends on a Permissions-Policy
+  // this page doesn't control. So "copy" here is layered, not a single
+  // API call with a scary failure state if that one call is blocked:
+  //   1. Try the async Clipboard API.
+  //   2. If that's blocked, reveal the exact text pre-selected and try the
+  //      legacy execCommand('copy') on that selection — sometimes permitted
+  //      even when the async API isn't.
+  //   3. Either way, the text stays visible and selected, so a plain
+  //      Cmd/Ctrl+C always works as a last resort. Not shown as an error —
+  //      "select and copy" is a normal path here, not a failure state.
+  function revealCopyBox(btn, text){
+    const container = btn.closest('.flag-actions, .action-card');
+    let wrap = container.querySelector('.copy-fallback');
+    if (!wrap){
+      wrap = document.createElement('div');
+      wrap.className = 'copy-fallback';
+      wrap.innerHTML = '<p class="copy-fallback-label">Selected — copy with ⌘C / Ctrl+C</p><div class="copy-fallback-text"></div>';
+      container.appendChild(wrap);
+    }
+    const textEl = wrap.querySelector('.copy-fallback-text');
+    textEl.textContent = text;
+    const range = document.createRange();
+    range.selectNodeContents(textEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+    return copied;
+  }
+
+  function sendAction(btn, text){
+    if (btn.disabled) return;
+    btn.classList.add('loading');
+    btn.disabled = true;
+    const label = btn.querySelector('.btn-label');
+    const original = label.dataset.original || label.textContent;
+    label.dataset.original = original;
+
+    copyToClipboard(text).then(() => {
+      btn.classList.remove('loading');
+      btn.classList.add('sent');
+      label.textContent = 'Copied — paste into chat';
+    }).catch(() => {
+      btn.classList.remove('loading');
+      const copied = revealCopyBox(btn, text);
+      if (copied){
+        btn.classList.add('sent');
+        label.textContent = 'Copied — paste into chat';
+      } else {
+        label.textContent = 'Selected below — press ⌘C';
+      }
+    }).finally(() => {
+      setTimeout(() => {
+        btn.classList.remove('sent');
+        btn.disabled = false;
+        label.textContent = original;
+      }, 6000);
+    });
+  }
+
+  document.getElementById('runScrapeBtn').addEventListener('click', function(){
+    sendAction(this, 'Run push_scrape.sh now and tell me what it found — whether the list changed and, if so, what the sync produced.');
+  });
+
+  renderFlagged();
+</script>

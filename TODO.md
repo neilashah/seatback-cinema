@@ -7,6 +7,20 @@ Running list, updated as items close or new ones surface. See the latest
 
 ## Open
 
+- [ ] **Watch for repeat Cloudflare challenges on the local scrape.**
+      `push_scrape.sh` hit an HTTP 403 on 2026-07-25 — but this one wasn't
+      the GHA-IP-block issue (that's fixed); the response headers showed
+      `cf-mitigated: challenge` and a Cloudflare "Just a moment..."
+      interstitial, which no plain HTTP client can pass regardless of IP or
+      headers. Very likely triggered by this session's unusually heavy
+      testing volume that day (6-8+ scrapes of the same list in a few
+      hours) tripping Cloudflare's bot heuristics, not a standing block —
+      the safety floor correctly refused to push (0 titles scraped). Left
+      to self-resolve; check whether the next scheduled 9am launchd run
+      goes through cleanly. If this recurs on a normal once-daily cadence
+      (not heavy testing), that's a real signal and would need a more
+      robust scraper (e.g. headless-browser-based, to actually execute the
+      JS challenge) rather than waiting it out.
 - [ ] **Gate scope decision (§6a of the 07-18 handoff).** The agreement gate
       currently overrides any M value. `verdict-debug.csv` shows 8 gated
       titles; 7 have M ≥ 40 (Inception 45.3, Moonlight 52.4, Dark Knight 52.3,
@@ -34,13 +48,18 @@ Running list, updated as items close or new ones surface. See the latest
       currently exist in this folder — confirm where they actually live
       before editing.
 - [ ] **Decide where the non-deploy pipeline scripts belong** —
-      `delta_ic_match.py`, `diag.py`, `lb_detail_scrape.py`, `overrides.csv`,
-      `overrides.numbers`, `probe_mi.js`, `push_scrape.sh`, `sync_catalog.py`,
-      `titles.tsv`, `titles_with_years.tsv`, `triage.py`. Currently at repo
-      root; not part of `DEPLOY.md`'s repo tree. Fine as-is, but worth a
-      deliberate call (e.g., a `matching/` folder) rather than leaving it
-      implicit — more pressing now that CI (not just local runs) depends on
-      these paths, so a move means updating the workflow files too.
+      `catalog-ops.html`, `delta_ic_match.py`, `diag.py`, `lb_detail_scrape.py`,
+      `overrides.csv`, `overrides.numbers`, `probe_mi.js`, `push_scrape.sh`,
+      `sync_catalog.py`, `titles.tsv`, `titles_with_years.tsv`, `triage.py`.
+      Currently at repo root; not part of `DEPLOY.md`'s repo tree. Fine
+      as-is, but worth a deliberate call (e.g., a `matching/` folder) rather
+      than leaving it implicit — more pressing now that CI (not just local
+      runs) depends on these paths, so a move means updating the workflow
+      files too.
+- [ ] **Keep `catalog-ops.html` in sync with the published Artifact.** The
+      committed copy is a point-in-time source snapshot, not a live link —
+      if the published dashboard gets edited/republished in a future
+      session, the repo copy needs updating separately or it'll drift.
 
 ## Reminders (standing, not one-time)
 
@@ -109,8 +128,8 @@ Running list, updated as items close or new ones surface. See the latest
       change, it just went unnoticed until this session's manual test.)
       Fixed by moving the scrape out of CI entirely: new `push_scrape.sh`
       runs locally (scheduled via launchd —
-      `com.seatback-cinema.push-scrape.plist`, template committed but **not
-      yet installed**, see Open), scrapes, and pushes `pipeline/raw_scrape.tsv`
+      `com.seatback-cinema.push-scrape.plist`, installed and loaded same
+      session, see below), scrapes, and pushes `pipeline/raw_scrape.tsv`
       only when it changes. That push triggers `sync-catalog.yml` (now an
       `on: push` trigger instead of being called from a watcher), which does
       the TMDB match, commits clean-tier titles straight to `main`, triggers
@@ -128,3 +147,43 @@ Running list, updated as items close or new ones surface. See the latest
       Installed the launchd schedule (`launchctl load`) — daily at 9am
       local from now on, no more manual/chat-triggered runs needed for the
       common case — 2026-07-25.
+- [x] **Catalog Ops dashboard built** (`catalog-ops.html`, published as a
+      claude.ai Artifact) — status strip (titles live, last scrape, last
+      membership change, launchd status), a button to copy a ready-to-paste
+      "run the scrape now" instruction, and a reconciliation section for
+      flagged titles (bless a match / search TMDB / pin the correct id).
+      Two real bugs found and fixed along the way, both worth remembering:
+      1. Initial version used `sendPrompt()` assuming published Artifacts
+         can message back into the chat that published them — they can't;
+         that's a different tool's mechanism entirely. Rebuilt around
+         copying a ready-to-paste instruction to the clipboard instead.
+      2. The "Bless this match" button built its click handler as
+         `onclick="sendAction(this, ${JSON.stringify(...)})"` — the JSON
+         string's own double quotes closed the HTML attribute early,
+         silently truncating it, so the button did nothing. Fixed by
+         removing all inline `onclick`/`onsubmit` attributes and wiring
+         every action via `addEventListener` after render instead, which
+         sidesteps the whole bug class (no string ever round-trips through
+         HTML attribute syntax).
+      Also hardened the copy mechanism itself once live testing showed the
+      async Clipboard API is blocked inside the published Artifact's
+      sandbox (likely a Permissions-Policy restriction) — it now falls back
+      to `execCommand('copy')` on a pre-selected text reveal, and if even
+      that's blocked, honestly shows "Selected below — press ⌘C" rather
+      than a false success or alarming failure state. `FLAGGED` data is a
+      manually-maintained snapshot embedded at publish time, not live — see
+      the Open item above about keeping it in sync — 2026-07-25.
+- [x] **Live-tested the dashboard's copy button for real** — user pasted
+      the copied instruction back into this chat, confirming the full
+      loop works. Running it surfaced a genuine finding (see below).
+- [x] **Diagnosed a Cloudflare JS challenge on the local scrape.**
+      `push_scrape.sh` hit a 403 — but response headers showed
+      `cf-mitigated: challenge` and a Cloudflare "Just a moment..." page,
+      a fundamentally different mechanism from the GHA-IP-block issue (no
+      plain HTTP client can pass a JS challenge, on any IP). Most likely
+      cause: this session scraped the same Letterboxd list 6-8+ times in a
+      few hours while building/testing, tripping Cloudflare's bot
+      heuristics. Safety floor worked correctly (0 titles scraped, refused
+      to push). Decided to wait and see whether tomorrow's normal
+      once-daily 9am run goes through cleanly rather than react now — see
+      Open item — 2026-07-25.
