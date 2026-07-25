@@ -7,6 +7,11 @@ Running list, updated as items close or new ones surface. See the latest
 
 ## Open
 
+- [ ] **Install the local push-scrape schedule.** `push_scrape.sh` +
+      `com.seatback-cinema.push-scrape.plist` are built and committed but the
+      launchd job isn't loaded yet — until it is, the membership sync only
+      runs when `push_scrape.sh` is triggered by hand. See DEPLOY.md §5
+      "Installing the local schedule" for the two-command activation.
 - [ ] **Gate scope decision (§6a of the 07-18 handoff).** The agreement gate
       currently overrides any M value. `verdict-debug.csv` shows 8 gated
       titles; 7 have M ≥ 40 (Inception 45.3, Moonlight 52.4, Dark Knight 52.3,
@@ -35,9 +40,9 @@ Running list, updated as items close or new ones surface. See the latest
       before editing.
 - [ ] **Decide where the non-deploy pipeline scripts belong** —
       `delta_ic_match.py`, `diag.py`, `lb_detail_scrape.py`, `overrides.csv`,
-      `overrides.numbers`, `probe_mi.js`, `sync_catalog.py`, `titles.tsv`,
-      `titles_with_years.tsv`, `triage.py`, `watch_catalog.py`. Currently at
-      repo root; not part of `DEPLOY.md`'s repo tree. Fine as-is, but worth a
+      `overrides.numbers`, `probe_mi.js`, `push_scrape.sh`, `sync_catalog.py`,
+      `titles.tsv`, `titles_with_years.tsv`, `triage.py`. Currently at repo
+      root; not part of `DEPLOY.md`'s repo tree. Fine as-is, but worth a
       deliberate call (e.g., a `matching/` folder) rather than leaving it
       implicit — more pressing now that CI (not just local runs) depends on
       these paths, so a move means updating the workflow files too.
@@ -76,6 +81,7 @@ Running list, updated as items close or new ones surface. See the latest
       committed `titles_with_years.tsv`, opens a `catalog-drift` GitHub
       issue on change (or `catalog-watch-broken` if the scrape itself looks
       broken). Verified locally against the live list — 2026-07-24.
+      **Superseded 2026-07-25 — see below: it never actually worked in CI.**
 - [x] Matching pipeline re-run to catch up with Delta's July 18 rotation —
       197 titles (23 added, 24 removed vs. the prior baseline), 195 auto +
       2 override, 0 left in review. Activated the staged `Protector` /
@@ -95,15 +101,26 @@ Running list, updated as items close or new ones surface. See the latest
       visibilitychange/pageshow. `CACHE_VERSION` bumped to `v2`. Fixed the
       bug where reopening from the home screen icon had no way to pick up a
       newer catalog short of opening the site in Safari — 2026-07-25.
-- [x] **Membership sync automated.** New `sync_catalog.py` + `.github/workflows/sync-catalog.yml`:
-      runs the full scrape + TMDB match, commits titles that matched cleanly
-      (`auto`/`override` tier) straight to `main` and triggers
-      `refresh-catalog.yml`, and holds back anything the matcher flagged
-      (`review`/`fuzzy`/`miss` tier) rather than shipping it unreviewed —
-      surfaced instead as a `catalog-needs-review` issue, self-resolving via
-      `overrides.csv` on a future sync. `watch-catalog.yml` no longer opens a
-      `catalog-drift` issue itself; it now triggers `sync-catalog.yml`
-      directly on detected drift, so the common case (everything matches
-      cleanly) needs no human step at all. `DEPLOY.md` §5 documents the full
-      chain; the old fully-manual pipeline still works unchanged for a
-      full look before shipping — 2026-07-25.
+- [x] **Membership sync automated, then corrected after a real CI failure.**
+      First version (`sync_catalog.py` scraping directly + `watch-catalog.yml`
+      triggering it) looked right and got built and pushed, but a live test
+      run of `sync-catalog.yml` immediately 403'd — and checking the history
+      showed **both prior scheduled `watch-catalog.yml` runs (07-24, 07-25)
+      had been silently 403'd too**, since day one. Letterboxd blocks
+      requests from GitHub Actions runner IPs even with realistic browser
+      headers; TMDB/MDBList/Trakt are unaffected. (The safety net worked as
+      designed though — it correctly opened `catalog-watch-broken` issue #1
+      on the first blocked run instead of misreporting a false catalog
+      change, it just went unnoticed until this session's manual test.)
+      Fixed by moving the scrape out of CI entirely: new `push_scrape.sh`
+      runs locally (scheduled via launchd —
+      `com.seatback-cinema.push-scrape.plist`, template committed but **not
+      yet installed**, see Open), scrapes, and pushes `pipeline/raw_scrape.tsv`
+      only when it changes. That push triggers `sync-catalog.yml` (now an
+      `on: push` trigger instead of being called from a watcher), which does
+      the TMDB match, commits clean-tier titles straight to `main`, triggers
+      `refresh-catalog.yml`, and surfaces anything flagged as a
+      `catalog-needs-review` issue. `watch_catalog.py` +
+      `.github/workflows/watch-catalog.yml` deleted (their job — cheap
+      diff-then-trigger — is now inherently handled by the push itself).
+      `DEPLOY.md` §5 documents the corrected chain — 2026-07-25.

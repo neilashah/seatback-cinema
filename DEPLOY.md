@@ -128,39 +128,62 @@ from the Actions tab resets that clock.
 
 ---
 
-## 5. The membership sync (`watch-catalog.yml` → `sync-catalog.yml`)
+## 5. The membership sync (`push_scrape.sh` → `sync-catalog.yml`)
 
 Adding/removing titles used to be a fully manual step (re-run the scrape,
 re-run the TMDB matcher, eyeball the output, commit). It's now mostly
-automated, in two stages:
+automated, in two stages that deliberately run in different places:
 
-1. **`watch-catalog.yml`** runs daily, scraping only the Letterboxd list's
-   title names (no TMDB/MDBList/Trakt calls — cheap) and diffing against the
-   committed `titles_with_years.tsv`. If it changed, it triggers
-   `sync-catalog.yml`. If the scrape itself looks broken (far fewer titles
-   than expected — a 403 or markup shift), that's reported as a
-   `catalog-watch-broken` issue instead, so it isn't mistaken for a real
-   catalog change.
-2. **`sync-catalog.yml`** re-scrapes, runs the full TMDB matcher
-   (`overrides.csv` still applies first), and **splits the result**:
-   titles that matched cleanly (`auto`/`override` tier) are committed
-   straight to `titles_with_years.tsv` + `matched.csv` on `main`, which then
-   triggers `refresh-catalog.yml` to rebuild `catalog.json` and redeploy —
-   no human step at all for the common case. Titles the matcher wasn't
-   confident about (`review`/`fuzzy`/`miss` tier — a remake collision, no
-   year to disambiguate, nothing plausible on TMDB) are held *out* of the
-   catalog entirely and surfaced as a `catalog-needs-review` GitHub issue
-   instead, so a bad guess can't ship unreviewed. They keep reappearing on
-   every future sync until an `overrides.csv` entry resolves them — add a
-   line there (see the file's own header for the format) and the next sync
-   picks it up cleanly.
+1. **`push_scrape.sh` runs locally** (your machine, on a schedule via
+   launchd — see `com.seatback-cinema.push-scrape.plist`), because it has
+   to: **Letterboxd blocks GitHub Actions runner IPs with a 403**, even with
+   realistic browser headers (confirmed 2026-07-25 — both scheduled
+   `watch-catalog.yml` runs and a manual `sync-catalog.yml` run all got
+   blocked immediately). TMDB/MDBList/Trakt are unaffected; this is
+   Letterboxd-specific. The script scrapes the list, and if it differs from
+   the committed `pipeline/raw_scrape.tsv`, commits and pushes just that
+   file. A basic sanity floor (fewer than 100 titles scraped) refuses to
+   push, so a blocked/broken scrape can't look like "the list went empty."
+2. **That push triggers `sync-catalog.yml`** (a GitHub Actions `on: push`
+   trigger, scoped to `pipeline/raw_scrape.tsv`), which runs the TMDB match
+   (`overrides.csv` still applies first) and **splits the result**: titles
+   that matched cleanly (`auto`/`override` tier) are committed straight to
+   `titles_with_years.tsv` + `matched.csv` on `main`, which then triggers
+   `refresh-catalog.yml` to rebuild `catalog.json` and redeploy — no human
+   step at all for the common case. Titles the matcher wasn't confident
+   about (`review`/`fuzzy`/`miss` tier — a remake collision, no year to
+   disambiguate, nothing plausible on TMDB) are held *out* of the catalog
+   entirely and surfaced as a `catalog-needs-review` GitHub issue instead,
+   so a bad guess can't ship unreviewed. They keep reappearing on every
+   future sync until an `overrides.csv` entry resolves them — add a line
+   there (see the file's own header for the format) and the next sync picks
+   it up cleanly. `sync-catalog.yml` also has `workflow_dispatch` for an
+   on-demand run against whatever's already in `pipeline/raw_scrape.tsv`.
 
 The old fully-manual path (`python3 lb_detail_scrape.py > titles_with_years.tsv`
 then `python3 delta_ic_match.py titles_with_years.tsv > pipeline/matched.csv`)
 still works if you want a full title-by-title look before shipping — nothing
-about it changed. `sync_catalog.py` is the same two scripts run back to back
-with the clean/flagged split layered on top; its docstring has the exact
-logic and a couple of known edge cases worth knowing about.
+about it changed. `sync_catalog.py` is the matching half of that same
+pipeline with the clean/flagged split layered on top, just reading
+`pipeline/raw_scrape.tsv` instead of re-scraping itself; its docstring has
+the exact logic and a couple of known edge cases worth knowing about.
+
+### Installing the local schedule
+
+`com.seatback-cinema.push-scrape.plist` is a launchd job template (daily,
+9am local by default — edit the `Hour`/`Minute` keys to change it). To
+activate it:
+
+```
+cp "com.seatback-cinema.push-scrape.plist" ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.seatback-cinema.push-scrape.plist
+```
+
+launchd only fires while the machine is awake; a missed run (asleep/off at
+9am) generally catches up shortly after wake, but isn't guaranteed. To stop
+it: `launchctl unload ~/Library/LaunchAgents/com.seatback-cinema.push-scrape.plist`.
+Logs land at `/tmp/seatback-push-scrape.log`. The script is also just a
+normal shell script — running it by hand any time is fine.
 
 ---
 
@@ -178,7 +201,7 @@ logic and a couple of known edge cases worth knowing about.
 
 ---
 
-## 6. Two things to remember later
+## 7. Two things to remember later
 
 **Bump `CACHE_VERSION` in `sw.js`** on any deploy that changes `index.html`,
 `scoring.js`, or the icons. Otherwise returning visitors keep serving the old

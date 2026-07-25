@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-sync_catalog.py — End-to-end catalog membership sync, safe to run unattended.
+sync_catalog.py — Match the latest raw scrape against TMDB, safe to run
+unattended.
 
-Scrapes the Letterboxd list, matches every title against TMDB (respecting
-overrides.csv), then SPLITS the result:
+Reads pipeline/raw_scrape.tsv (the raw Letterboxd scrape — title, year,
+slug), matches every title against TMDB (respecting overrides.csv), then
+SPLITS the result:
 
   - Titles that matched cleanly (auto or override tier) are written straight
     to titles_with_years.tsv + pipeline/matched.csv — the same files the
@@ -15,9 +17,14 @@ overrides.csv), then SPLITS the result:
     reappearing on every future run until an overrides.csv entry resolves
     them one way or the other — see DEPLOY.md §5.
 
-This is the automated counterpart to running lb_detail_scrape.py ->
-delta_ic_match.py by hand and eyeballing the result; that manual path still
-works fine for anyone who wants a full title-by-title look before shipping.
+Note this script does NOT do the Letterboxd scrape itself (that used to be
+a subprocess call to lb_detail_scrape.py here, but Letterboxd blocks
+requests from GitHub Actions' runner IPs with a 403 even with realistic
+browser headers — confirmed 2026-07-25 — so the scrape can't run in CI at
+all). push_scrape.sh runs the scrape from a real machine instead and pushes
+pipeline/raw_scrape.tsv when it changes; that push is what triggers this
+script in CI. Running lb_detail_scrape.py by hand and pointing this at its
+output works identically for a local/manual run.
 
 Known limitation: if a title that matched cleanly on a previous run becomes
 ambiguous on a later run (e.g. TMDB gains a same-title collision film), it
@@ -26,7 +33,7 @@ before. This is deliberate — silently keeping a possibly-stale match isn't
 safer than holding it back — but worth knowing if a previously-fine title
 unexpectedly disappears.
 
-Run (from repo root, TMDB_KEY set):
+Run (from repo root, TMDB_KEY set, pipeline/raw_scrape.tsv present):
     python3 sync_catalog.py
 
 Writes (only touches these on success — a failure leaves everything as-is):
@@ -37,8 +44,8 @@ Writes (only touches these on success — a failure leaves everything as-is):
 
 Exit codes:
     0  ran fine (flagged.txt may or may not be empty — check its size)
-    1  scrape or match step failed outright (e.g. TMDB_KEY missing/invalid,
-       or the two steps disagree on how many titles there are)
+    1  raw_scrape.tsv missing/empty, or the match step failed outright (e.g.
+       TMDB_KEY missing/invalid, or a row-count mismatch)
 """
 import csv
 import io
@@ -47,17 +54,20 @@ import subprocess
 import sys
 
 CLEAN_TIERS = {"auto", "override"}
+RAW_SCRAPE = "pipeline/raw_scrape.tsv"
 SCRATCH_TSV = "titles_with_years.tsv.tmp"
 
 
 def main():
-    scrape = subprocess.run([sys.executable, "lb_detail_scrape.py"],
-                             capture_output=True, text=True)
-    sys.stderr.write(scrape.stderr)
-    if scrape.returncode != 0 or not scrape.stdout.strip():
-        sys.stderr.write("scrape failed — aborting, nothing written\n")
+    if not os.path.exists(RAW_SCRAPE):
+        sys.stderr.write(f"{RAW_SCRAPE} not found — run push_scrape.sh (or "
+                          f"lb_detail_scrape.py) first. Aborting, nothing written\n")
         sys.exit(1)
-    titles_tsv = scrape.stdout
+    with open(RAW_SCRAPE, encoding="utf-8") as f:
+        titles_tsv = f.read()
+    if not titles_tsv.strip():
+        sys.stderr.write(f"{RAW_SCRAPE} is empty — aborting, nothing written\n")
+        sys.exit(1)
 
     # delta_ic_match.py reads a file path, not stdin — hand it the scrape
     # unchanged, same as the manual pipeline does.

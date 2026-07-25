@@ -1,19 +1,26 @@
 name: Sync catalog membership
 
-# Runs sync_catalog.py end to end: scrape the Letterboxd list, match every
-# title against TMDB, commit whatever matched cleanly (auto/override tier)
-# straight to main, and hold back anything the matcher wasn't confident
+# Triggered by a push to pipeline/raw_scrape.tsv — that file is updated by
+# push_scrape.sh, which has to run from a real machine, not a GitHub Actions
+# runner: Letterboxd blocks GHA runner IPs with a 403 even with realistic
+# browser headers (confirmed 2026-07-25), so the scrape itself can't happen
+# here. See DEPLOY.md §5 and push_scrape.sh's own header for the full story.
+#
+# From that already-scraped file, this workflow runs the TMDB match
+# (sync_catalog.py), commits whatever matched cleanly (auto/override tier)
+# straight to main, and holds back anything the matcher wasn't confident
 # about (review/fuzzy/miss tier) rather than shipping a bad match
 # unreviewed. Held-back titles are surfaced as a `catalog-needs-review`
 # GitHub issue instead — see sync_catalog.py's docstring for the exact
-# split logic and DEPLOY.md §5 for the manual fallback.
+# split logic.
 #
-# Normally triggered automatically by watch-catalog.yml when it detects the
-# Letterboxd list changed; workflow_dispatch below is for an on-demand run.
 # On a successful commit, kicks off refresh-catalog.yml so catalog.json and
 # the live site pick up the new titles without a separate manual step.
 
 on:
+  push:
+    paths:
+      - 'pipeline/raw_scrape.tsv'
   workflow_dispatch:
 
 permissions:
