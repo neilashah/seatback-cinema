@@ -27,9 +27,17 @@
 
   .header{ padding:20px 18px 10px; position:sticky; top:0; background:rgba(11,11,13,0.92);
     backdrop-filter:blur(20px); z-index:10; border-bottom:1px solid var(--hairline); }
-  .wordmark{ display:flex; align-items:center; gap:11px; }
-  .wordmark svg{ width:34px; height:34px; }
-  .wordmark span{ font-size:22px; font-weight:800; letter-spacing:-0.01em; color:var(--text); }
+  .header-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .wordmark{ display:flex; align-items:center; gap:11px; min-width:0; }
+  .wordmark svg{ width:34px; height:34px; flex-shrink:0; }
+  .wordmark span{ font-size:22px; font-weight:800; letter-spacing:-0.01em; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .refresh-btn{ display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    width:34px; height:34px; border-radius:9px; background:var(--surface); border:1px solid var(--hairline);
+    color:var(--text-dim); cursor:pointer; padding:0; }
+  .refresh-btn svg{ width:16px; height:16px; }
+  .refresh-btn.spinning svg{ animation:spin 0.8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
 
   .tabbar{ display:flex; gap:4px; margin-top:14px; background:var(--surface); border-radius:11px; padding:3px; }
   .tab{ flex:1; text-align:center; padding:8px 4px; border-radius:9px; font-size:12.5px; font-weight:600;
@@ -142,13 +150,21 @@
 <div id="app">
 
   <div class="header">
-    <div class="wordmark">
-      <svg viewBox="0 0 64 64" fill="none" stroke="#F2F1ED" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="12" y="14" width="40" height="36" rx="8"/>
-        <rect x="17" y="19" width="30" height="26" rx="5" opacity="0.35"/>
-        <rect x="30" y="30" width="13" height="10" rx="2.5" fill="#8F68C4" stroke="none"/>
-      </svg>
-      <span>Seatback Cinema</span>
+    <div class="header-top">
+      <div class="wordmark">
+        <svg viewBox="0 0 64 64" fill="none" stroke="#F2F1ED" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="12" y="14" width="40" height="36" rx="8"/>
+          <rect x="17" y="19" width="30" height="26" rx="5" opacity="0.35"/>
+          <rect x="30" y="30" width="13" height="10" rx="2.5" fill="#8F68C4" stroke="none"/>
+        </svg>
+        <span>Seatback Cinema</span>
+      </div>
+      <button class="refresh-btn" id="refreshBtn" type="button" aria-label="Refresh catalog" title="Refresh catalog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+          <polyline points="21 3 21 9 15 9"/>
+        </svg>
+      </button>
     </div>
     <div class="tabbar">
       <div class="tab active" data-tab="browse" tabindex="0" role="button">Browse</div>
@@ -651,9 +667,19 @@ function showFatal(msg){
     `<div class="empty">${msg}</div>`;
 }
 
-async function loadCatalog(){
+// force:true bypasses the service worker's stale-while-revalidate (which
+// always answers from cache first) and asks it to hit the network before
+// falling back — see the X-Seatback-Refresh header check in sw.js. Used by
+// the refresh button and the auto-recheck-on-resume listener below, both of
+// which exist because a standalone home-screen launch has no browser reload
+// button and, on iOS, often just resumes the already-loaded page rather than
+// re-running this script — so without an explicit re-fetch, a passenger can
+// sit on a stale catalog indefinitely with no way to force a check.
+async function loadCatalog(force){
   try {
-    const res = await fetch(CATALOG_URL, { cache: 'no-cache' });
+    const opts = { cache: 'no-cache' };
+    if (force) opts.headers = { 'X-Seatback-Refresh': '1' };
+    const res = await fetch(CATALOG_URL, opts);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error('empty catalog');
@@ -662,11 +688,40 @@ async function loadCatalog(){
     warmPosters();
   } catch (err) {
     console.error('Catalog load failed:', err);
-    // Offline with no cached copy is the realistic failure on a plane, so say
-    // something a passenger can act on rather than surfacing an error code.
-    showFatal("Couldn't load this flight's catalog. Reconnect for a moment and reopen the app.");
+    // A refresh attempt failing (e.g. captive-portal Wi-Fi) shouldn't wipe an
+    // already-rendered catalog — only the very first load shows the fatal
+    // state, since that's the realistic offline-with-nothing-cached case.
+    if (!MOVIES.length){
+      showFatal("Couldn't load this flight's catalog. Reconnect for a moment and reopen the app.");
+    }
   }
 }
+
+const refreshBtn = document.getElementById('refreshBtn');
+if (refreshBtn){
+  refreshBtn.addEventListener('click', async () => {
+    if (refreshBtn.classList.contains('spinning')) return;
+    refreshBtn.classList.add('spinning');
+    await loadCatalog(true);
+    refreshBtn.classList.remove('spinning');
+  });
+}
+
+// Silent auto-recheck when the app regains the foreground (covers the
+// standalone-launch-resumes-without-reloading case above). No spinner or
+// visible loading state — same "quiet" philosophy as the service worker's
+// background revalidation, just actually reaching the already-open page.
+// Debounced so a quick app-switch-and-back doesn't fire a redundant fetch.
+let lastAutoRefresh = Date.now();
+function maybeAutoRefresh(){
+  if (Date.now() - lastAutoRefresh < 60000) return;
+  lastAutoRefresh = Date.now();
+  loadCatalog(true);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') maybeAutoRefresh();
+});
+window.addEventListener('pageshow', (e) => { if (e.persisted) maybeAutoRefresh(); });
 
 // Offline support. The service worker caches the app shell and catalog so a
 // launch with no connectivity still renders everything; posters are warmed in

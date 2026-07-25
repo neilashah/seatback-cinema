@@ -21,7 +21,7 @@
    BUMP CACHE_VERSION on every deploy that changes the shell.
    ============================================================================= */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const SHELL_CACHE   = `seatback-shell-${CACHE_VERSION}`;
 const DATA_CACHE    = `seatback-data-${CACHE_VERSION}`;
 const POSTER_CACHE  = `seatback-posters-${CACHE_VERSION}`;
@@ -82,6 +82,22 @@ async function staleWhileRevalidate(request, cacheName) {
   return cached || (await network) || new Response('[]', { headers: { 'Content-Type': 'application/json' } });
 }
 
+async function networkFirst(request, cacheName, timeoutMs) {
+  const cache = await caches.open(cacheName);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(request, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res && res.ok) cache.put(request, res.clone());
+    return res;
+  } catch (e) {
+    clearTimeout(timer);
+    const cached = await cache.match(request, { ignoreSearch: true });
+    return cached || new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
 async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request, { ignoreSearch: true });
@@ -110,9 +126,18 @@ self.addEventListener('fetch', (event) => {
   // Same-origin only from here
   if (url.origin !== self.location.origin) return;
 
-  // Catalog data
+  // Catalog data. Normally stale-while-revalidate (instant from cache, quiet
+  // background refresh) — but the refresh button and the resume-from-
+  // background recheck (see index.html) send X-Seatback-Refresh to explicitly
+  // ask for network-first instead, since stale-while-revalidate would just
+  // hand back the same cached response those callers are trying to bypass.
+  // Time-boxed so a captive-portal Wi-Fi that resolves DNS but blocks traffic
+  // can't leave a manual refresh hanging.
   if (url.pathname.endsWith('/' + CATALOG_PATH) || url.pathname.endsWith(CATALOG_PATH)) {
-    event.respondWith(staleWhileRevalidate(req, DATA_CACHE));
+    const forceRefresh = req.headers.get('X-Seatback-Refresh') === '1';
+    event.respondWith(forceRefresh
+      ? networkFirst(req, DATA_CACHE, 8000)
+      : staleWhileRevalidate(req, DATA_CACHE));
     return;
   }
 
