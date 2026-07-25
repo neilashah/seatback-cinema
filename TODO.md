@@ -7,11 +7,6 @@ Running list, updated as items close or new ones surface. See the latest
 
 ## Open
 
-- [ ] **Install the local push-scrape schedule.** `push_scrape.sh` +
-      `com.seatback-cinema.push-scrape.plist` are built and committed but the
-      launchd job isn't loaded yet — until it is, the membership sync only
-      runs when `push_scrape.sh` is triggered by hand. See DEPLOY.md §5
-      "Installing the local schedule" for the two-command activation.
 - [ ] **Gate scope decision (§6a of the 07-18 handoff).** The agreement gate
       currently overrides any M value. `verdict-debug.csv` shows 8 gated
       titles; 7 have M ≥ 40 (Inception 45.3, Moonlight 52.4, Dark Knight 52.3,
@@ -124,3 +119,12 @@ Running list, updated as items close or new ones surface. See the latest
       `.github/workflows/watch-catalog.yml` deleted (their job — cheap
       diff-then-trigger — is now inherently handled by the push itself).
       `DEPLOY.md` §5 documents the corrected chain — 2026-07-25.
+- [x] **Verified the corrected chain end-to-end for real.** Ran
+      `push_scrape.sh` locally (189 titles, seeded `pipeline/raw_scrape.tsv`
+      for the first time) — confirmed the push actually triggered
+      `sync-catalog.yml` (`event: push`), which matched cleanly (189/189, 0
+      flagged) and correctly found nothing new to commit since it already
+      matched what was live. Closed issue #1 with the root-cause writeup.
+      Installed the launchd schedule (`launchctl load`) — daily at 9am
+      local from now on, no more manual/chat-triggered runs needed for the
+      common case — 2026-07-25.
