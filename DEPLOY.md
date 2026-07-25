@@ -88,16 +88,13 @@ What it does: rebuilds `catalog.json` from the committed `matched.csv`,
 validates it, commits, and Pages redeploys.
 
 **What it deliberately does not do: change which films are in the catalog.**
-Adding/removing titles means re-running the Letterboxd scrape and the TMDB
-matcher, and matching has a manual review step (`overrides.csv` — 2 of 198
-needed hand-matching last time). Automating that would let a bad match go live
-unreviewed. So the split is:
+That's `sync-catalog.yml`'s job (§5 below) — this workflow only refreshes
+scores for titles already in `matched.csv`.
 
-- **Scores** — automated, twice on the 1st of each month. Safe: same titles,
-  fresh numbers.
-- **Membership** — manual, when Delta rotates the catalog. Run the Python
-  pipeline locally, review the matches, commit the new `matched.csv`, then hit
-  "Run workflow" to rescore.
+- **Scores** — automated, twice on the 1st of each month.
+- **Membership** — automated for anything that matches TMDB cleanly (see
+  §5); a human is only needed for titles the matcher itself flags as
+  ambiguous.
 
 ### Stale-fallback
 
@@ -131,7 +128,43 @@ from the Actions tab resets that clock.
 
 ---
 
-## 5. Deploy checklist
+## 5. The membership sync (`watch-catalog.yml` → `sync-catalog.yml`)
+
+Adding/removing titles used to be a fully manual step (re-run the scrape,
+re-run the TMDB matcher, eyeball the output, commit). It's now mostly
+automated, in two stages:
+
+1. **`watch-catalog.yml`** runs daily, scraping only the Letterboxd list's
+   title names (no TMDB/MDBList/Trakt calls — cheap) and diffing against the
+   committed `titles_with_years.tsv`. If it changed, it triggers
+   `sync-catalog.yml`. If the scrape itself looks broken (far fewer titles
+   than expected — a 403 or markup shift), that's reported as a
+   `catalog-watch-broken` issue instead, so it isn't mistaken for a real
+   catalog change.
+2. **`sync-catalog.yml`** re-scrapes, runs the full TMDB matcher
+   (`overrides.csv` still applies first), and **splits the result**:
+   titles that matched cleanly (`auto`/`override` tier) are committed
+   straight to `titles_with_years.tsv` + `matched.csv` on `main`, which then
+   triggers `refresh-catalog.yml` to rebuild `catalog.json` and redeploy —
+   no human step at all for the common case. Titles the matcher wasn't
+   confident about (`review`/`fuzzy`/`miss` tier — a remake collision, no
+   year to disambiguate, nothing plausible on TMDB) are held *out* of the
+   catalog entirely and surfaced as a `catalog-needs-review` GitHub issue
+   instead, so a bad guess can't ship unreviewed. They keep reappearing on
+   every future sync until an `overrides.csv` entry resolves them — add a
+   line there (see the file's own header for the format) and the next sync
+   picks it up cleanly.
+
+The old fully-manual path (`python3 lb_detail_scrape.py > titles_with_years.tsv`
+then `python3 delta_ic_match.py titles_with_years.tsv > pipeline/matched.csv`)
+still works if you want a full title-by-title look before shipping — nothing
+about it changed. `sync_catalog.py` is the same two scripts run back to back
+with the clean/flagged split layered on top; its docstring has the exact
+logic and a couple of known edge cases worth knowing about.
+
+---
+
+## 6. Deploy checklist
 
 - [ ] `SeatbackCinema.html` renamed to `index.html`
 - [ ] `scoring.js` at root is the **agreement-gate version**

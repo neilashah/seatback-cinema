@@ -1,0 +1,90 @@
+name: Sync catalog membership
+
+# Runs sync_catalog.py end to end: scrape the Letterboxd list, match every
+# title against TMDB, commit whatever matched cleanly (auto/override tier)
+# straight to main, and hold back anything the matcher wasn't confident
+# about (review/fuzzy/miss tier) rather than shipping a bad match
+# unreviewed. Held-back titles are surfaced as a `catalog-needs-review`
+# GitHub issue instead — see sync_catalog.py's docstring for the exact
+# split logic and DEPLOY.md §5 for the manual fallback.
+#
+# Normally triggered automatically by watch-catalog.yml when it detects the
+# Letterboxd list changed; workflow_dispatch below is for an on-demand run.
+# On a successful commit, kicks off refresh-catalog.yml so catalog.json and
+# the live site pick up the new titles without a separate manual step.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-catalog
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run sync
+        env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+        run: python3 sync_catalog.py
+
+      - name: Ensure labels exist
+        run: |
+          gh label create catalog-needs-review --color 0E8A16 \
+            --description "Titles held back from the catalog pending a human match decision" --force
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Commit clean-tier titles
+        id: commit
+        run: |
+          git add titles_with_years.tsv pipeline/matched.csv
+          if git diff --cached --quiet; then
+            echo "No clean-tier changes to commit."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Sync catalog membership ($(date -u +%Y-%m-%d))"
+          # Defensive: a concurrent push (e.g. someone committing by hand,
+          # or refresh-catalog.yml landing mid-run) would otherwise reject
+          # this push outright.
+          git pull --rebase origin main
+          git push
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger score refresh
+        if: steps.commit.outputs.committed == 'true'
+        run: gh workflow run refresh-catalog.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Update review issue
+        run: |
+          existing=$(gh issue list --label catalog-needs-review --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -s flagged.txt ]; then
+            if [ -n "$existing" ]; then
+              gh issue edit "$existing" --body-file flagged.txt
+              echo "Updated issue #$existing."
+            else
+              gh issue create --title "Titles need a match decision" \
+                --label catalog-needs-review --body-file flagged.txt
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "All titles resolved cleanly this sync — nothing left to review."
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}

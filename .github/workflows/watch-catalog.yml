@@ -6,12 +6,13 @@ name: Watch Letterboxd list for changes
 # TMDB/MDBList/Trakt and commits nothing — it only scrapes the one
 # Letterboxd list and diffs title sets, so it's cheap enough to run daily.
 #
-# On a detected change, opens a GitHub issue (labeled `catalog-drift`) so
-# you know to run the manual matching pipeline — see DEPLOY.md §4. Won't
-# open a duplicate while one's already open. If the scrape itself looks
-# broken (far fewer titles than expected — a 403 or markup shift), that's
-# reported separately under `catalog-watch-broken` so it's not mistaken for
-# a real catalog change.
+# On a detected change, triggers sync-catalog.yml to actually re-run the
+# matching pipeline and commit whatever resolves cleanly — see that
+# workflow and sync_catalog.py for what happens next; a human is only
+# needed if something ends up flagged for review there. If the scrape
+# itself looks broken (far fewer titles than expected — a 403 or markup
+# shift), that's reported separately as a `catalog-watch-broken` issue so
+# it isn't mistaken for a real catalog change.
 
 on:
   schedule:
@@ -20,6 +21,7 @@ on:
 
 permissions:
   issues: write
+  actions: write   # needed to trigger sync-catalog.yml via workflow_dispatch
 
 jobs:
   watch:
@@ -33,8 +35,6 @@ jobs:
 
       - name: Ensure labels exist
         run: |
-          gh label create catalog-drift --color FBCA04 \
-            --description "Delta's Letterboxd list changed" --force
           gh label create catalog-watch-broken --color D93F0B \
             --description "watch-catalog.yml scrape looks broken" --force
         env:
@@ -49,19 +49,9 @@ jobs:
           set -e
           cat watch-output.txt
 
-      - name: Open issue on drift
+      - name: Trigger membership sync on drift
         if: steps.watch.outputs.code == '1'
-        run: |
-          existing=$(gh issue list --label catalog-drift --state open \
-            --json number --jq '.[0].number // empty')
-          if [ -n "$existing" ]; then
-            echo "Issue #$existing already open — not creating a duplicate."
-            exit 0
-          fi
-          gh issue create \
-            --title "Letterboxd list changed — re-run matching pipeline" \
-            --label catalog-drift \
-            --body-file watch-output.txt
+        run: gh workflow run sync-catalog.yml
         env:
           GH_TOKEN: ${{ github.token }}
 

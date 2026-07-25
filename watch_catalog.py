@@ -6,12 +6,14 @@ Scrapes the same list as lb_detail_scrape.py but does nothing with the
 result except diff it against the committed titles_with_years.tsv (the file
 that was actually fed into delta_ic_match.py to produce the current
 matched.csv / catalog.json). If the title set changed, that's the signal
-Delta rotated the catalog and the real (manual) matching pipeline should be
-re-run — see DEPLOY.md §4.
+Delta rotated the catalog — .github/workflows/watch-catalog.yml runs this
+daily and triggers sync-catalog.yml on drift, which re-runs the matching
+pipeline and commits whatever resolves cleanly. See DEPLOY.md §5.
 
-This script intentionally does NOT touch titles_with_years.tsv, matched.csv,
-or catalog.json. Re-running lb_detail_scrape.py + delta_ic_match.py, review,
-and committing the result is what moves the baseline forward for next time.
+This script itself intentionally does NOT touch titles_with_years.tsv,
+matched.csv, or catalog.json — it only diffs. sync_catalog.py (invoked by
+the workflow above) or a manual lb_detail_scrape.py + delta_ic_match.py run
+is what actually moves the baseline forward.
 
 Run:
     python3 watch_catalog.py
@@ -109,9 +111,10 @@ def main():
         print(f"\nRemoved ({len(removed)}):")
         for t in sorted(removed):
             print(f"  - {t}")
-    print("\nRun the matching pipeline locally (lb_detail_scrape.py -> "
-          "delta_ic_match.py), review, commit the new titles_with_years.tsv "
-          "+ matched.csv, then trigger refresh-catalog.yml. See DEPLOY.md §4.")
+    print("\nIn CI, watch-catalog.yml triggers sync-catalog.yml automatically "
+          "from here. Running this locally instead? Run sync_catalog.py (or "
+          "lb_detail_scrape.py -> delta_ic_match.py by hand for a full look "
+          "before shipping) — see DEPLOY.md §5.")
     sys.exit(1)
 
 
