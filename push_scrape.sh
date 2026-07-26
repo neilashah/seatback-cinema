@@ -25,10 +25,27 @@ git pull --rebase --quiet
 python3 lb_detail_scrape.py > "$SCRATCH" 2>"$LOG"
 n=$(wc -l < "$SCRATCH" | tr -d ' ')
 
+# Absolute floor catches a totally-blocked scrape (0 titles). But
+# 2026-07-26 showed that's not enough on its own: page 2 of the
+# Letterboxd pagination silently failed, page 1's ~100 titles cleared this
+# floor easily, and a partial scrape got all the way to a real commit
+# (dropped 89 titles). Also compare against the last known-good count —
+# same ">20% shrink" threshold refresh-catalog.yml already uses for
+# scores, applied here to membership.
 if [ "$n" -lt 100 ]; then
   echo "Scrape returned only $n titles (expected ~190+) — looks broken, not pushing." >&2
   cat "$LOG" >&2
   exit 1
+fi
+
+if [ -f pipeline/raw_scrape.tsv ]; then
+  prev_n=$(wc -l < pipeline/raw_scrape.tsv | tr -d ' ')
+  threshold=$(( prev_n * 80 / 100 ))
+  if [ "$prev_n" -gt 0 ] && [ "$n" -lt "$threshold" ]; then
+    echo "Scrape returned $n titles, down from $prev_n (>20% drop) — looks like a partial/broken scrape, not pushing." >&2
+    cat "$LOG" >&2
+    exit 1
+  fi
 fi
 
 if [ -f pipeline/raw_scrape.tsv ] && diff -q "$SCRATCH" pipeline/raw_scrape.tsv >/dev/null 2>&1; then

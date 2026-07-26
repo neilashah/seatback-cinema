@@ -44,8 +44,11 @@ Writes (only touches these on success — a failure leaves everything as-is):
 
 Exit codes:
     0  ran fine (flagged.txt may or may not be empty — check its size)
-    1  raw_scrape.tsv missing/empty, or the match step failed outright (e.g.
-       TMDB_KEY missing/invalid, or a row-count mismatch)
+    1  raw_scrape.tsv missing/empty, the match step failed outright (e.g.
+       TMDB_KEY missing/invalid, a row-count mismatch), or the clean-tier
+       count would shrink the catalog by more than 20% versus what's
+       currently committed (almost certainly a partial/broken upstream
+       scrape, not a real membership change)
 """
 import csv
 import io
@@ -68,6 +71,19 @@ def main():
     if not titles_tsv.strip():
         sys.stderr.write(f"{RAW_SCRAPE} is empty — aborting, nothing written\n")
         sys.exit(1)
+
+    # Read the currently-committed baseline BEFORE anything below can
+    # overwrite it, so the shrink-check further down has something to
+    # compare against. (2026-07-26: a partial scrape — page 2 of the
+    # Letterboxd pagination silently failed — landed exactly on the old
+    # fixed floor in push_scrape.sh and got all the way to a real commit,
+    # dropping 89 titles. That floor is fixed now too, but this is the
+    # second, independent layer catching the same failure mode in case a
+    # bad raw_scrape.tsv ever reaches this script another way.)
+    prev_count = 0
+    if os.path.exists("titles_with_years.tsv"):
+        with open("titles_with_years.tsv", encoding="utf-8") as f:
+            prev_count = sum(1 for l in f if l.strip())
 
     # delta_ic_match.py reads a file path, not stdin — hand it the scrape
     # unchanged, same as the manual pipeline does.
@@ -96,6 +112,13 @@ def main():
             clean_rows.append(row)
         else:
             flagged_rows.append(row)
+
+    if prev_count and len(clean_rows) < prev_count * 0.8:
+        sys.stderr.write(
+            f"clean-tier count shrank {prev_count} -> {len(clean_rows)} "
+            f"(>20%) — refusing to write. Likely a partial/broken upstream "
+            f"scrape, not a real catalog change; check {RAW_SCRAPE}\n")
+        sys.exit(1)
 
     with open("titles_with_years.tsv", "w", encoding="utf-8") as f:
         f.write("\n".join(clean_tsv) + ("\n" if clean_tsv else ""))
