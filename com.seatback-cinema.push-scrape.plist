@@ -7,7 +7,7 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
-		<string>/Users/neil/Desktop/Claude/Seatback Cinema/push_scrape.sh</string>
+		<string>/Users/neil/seatback-cinema/push_scrape.sh</string>
 	</array>
 	<key>StartCalendarInterval</key>
 	<dict>
