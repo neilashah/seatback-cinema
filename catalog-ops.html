@@ -224,7 +224,7 @@
     <div class="action-card">
       <div>
         <h3>Run the catalog sync now</h3>
-        <p>Normally runs on its own every morning, entirely on GitHub Actions — no laptop involved. Copy the instruction below and paste it into a Claude Code chat to trigger it right now instead of waiting: scrapes Em's Letterboxd list via ScraperAPI, matches against TMDB, and commits (kicking off the score refresh + deploy) if anything changed.</p>
+        <p>Normally runs on its own every morning, entirely on GitHub Actions — no laptop involved (a scheduled check also refreshes this page ~30 min after). Copy the instruction below and paste it into a Claude Code chat to trigger it right now instead of waiting: scrapes Em's Letterboxd list via ScraperAPI, matches against TMDB, commits (kicking off the score refresh + deploy) if anything changed, and refreshes this dashboard to match.</p>
       </div>
       <button class="btn btn-primary" id="runScrapeBtn">
         <span class="spinner"></span>
@@ -238,7 +238,7 @@
       <h2>Needs your review</h2>
       <span class="count-chip" id="flagCount">0 flagged</span>
     </div>
-    <p class="section-sub">Titles the TMDB matcher wasn't confident enough to add on its own — held out of the catalog until you bless a match or pin the correct one. This list is a snapshot from when this page was last published; ask Claude to refresh it for the current state.</p>
+    <p class="section-sub">Titles the TMDB matcher wasn't confident enough to add on its own — held out of the catalog until you bless a match or pin the correct one. This list refreshes automatically daily (~9:30am ET, shortly after the sync) and whenever you run the sync manually above; it's a snapshot from the last refresh, not live.</p>
 
     <div id="flagList"></div>
     <div class="all-clear" id="allClear">
@@ -434,7 +434,7 @@
   }
 
   document.getElementById('runScrapeBtn').addEventListener('click', function(){
-    sendAction(this, 'Trigger sync-catalog.yml now (gh workflow run sync-catalog.yml) and tell me what it found — whether the list changed and, if so, what the sync produced.');
+    sendAction(this, 'Trigger sync-catalog.yml now (gh workflow run sync-catalog.yml), wait for it to finish, and tell me what it found. Then, in this same response: read pipeline/flagged.json and the current repo stats (title count, last scrape/membership commit timestamps), update this Catalog Ops dashboard (catalog-ops.html) to match — both the FLAGGED array and the status strip — and republish it to the same Artifact URL.');
   });
 
   renderFlagged();

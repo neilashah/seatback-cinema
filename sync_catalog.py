@@ -12,10 +12,13 @@ SPLITS the result:
     manual pipeline produces — ready to commit as-is.
   - Titles that didn't (review/fuzzy/miss tier) are held OUT of both files
     entirely, so a bad match can't ship into the live catalog unreviewed.
-    They're written to flagged.txt instead, for the caller to surface
-    however it likes (the CI workflow opens a GitHub issue). They'll keep
-    reappearing on every future run until an overrides.csv entry resolves
-    them one way or the other — see DEPLOY.md §5.
+    They're written to flagged.txt (human-readable, for the GitHub issue
+    the CI workflow opens) and pipeline/flagged.json (structured, same
+    shape the Catalog Ops dashboard's FLAGGED array expects — so anything
+    that wants the current review queue can read JSON directly instead of
+    parsing prose). They'll keep reappearing on every future run until an
+    overrides.csv entry resolves them one way or the other — see
+    DEPLOY.md §5.
 
 Note this script does NOT do the Letterboxd scrape itself — that's a
 separate step in the same CI job (sync-catalog.yml), since ScraperAPI
@@ -42,6 +45,8 @@ Writes (only touches these on success — a failure leaves everything as-is):
     pipeline/matched.csv    — clean-tier titles only
     flagged.txt             — human-readable summary of held-back titles
                               (present but empty if there are none)
+    pipeline/flagged.json   — same held-back titles, structured (a JSON
+                              array, empty `[]` if there are none)
 
 Exit codes:
     0  ran fine (flagged.txt may or may not be empty — check its size)
@@ -53,6 +58,7 @@ Exit codes:
 """
 import csv
 import io
+import json
 import os
 import subprocess
 import sys
@@ -145,6 +151,26 @@ def main():
                     "correct tmdb_id (or the same id shown above to bless it), "
                     "and it'll pick up cleanly next sync. See overrides.csv's "
                     "own header for the exact format.\n")
+
+    # Structured counterpart to flagged.txt, in the exact shape
+    # catalog-ops.html's FLAGGED array expects — lets the dashboard (or
+    # anything else) pick up the current review queue with a direct JSON
+    # read instead of parsing the human-readable summary above.
+    flagged_json = [
+        {
+            "title": row["raw_title"],
+            "year": row["year_hint"] or "",
+            "tier": row["confidence"],
+            "note": row["note"],
+            "guessId": row["tmdb_id"] or None,
+            "guessTitle": row["matched_title"] or None,
+            "guessYear": row["release_year"] or None,
+        }
+        for row in flagged_rows
+    ]
+    with open("pipeline/flagged.json", "w", encoding="utf-8") as f:
+        json.dump(flagged_json, f, indent=2)
+        f.write("\n")
 
     print(f"clean: {len(clean_rows)}, flagged: {len(flagged_rows)}")
 

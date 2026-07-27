@@ -11,6 +11,9 @@ name: Sync catalog membership
 # about (review/fuzzy/miss tier) are held *out* of the catalog and surfaced
 # as a catalog-needs-review GitHub issue instead, so a bad guess can't ship
 # unreviewed -- see sync_catalog.py's docstring for the exact split logic.
+# The same held-back titles also land in pipeline/flagged.json (structured,
+# machine-readable) for the Catalog Ops dashboard's "Needs your review"
+# section to pick up.
 #
 # This used to be two stages in two different places: a local script
 # (push_scrape.sh, scheduled via launchd) did the scrape because Letterboxd
@@ -85,7 +88,7 @@ jobs:
       - name: Commit clean-tier titles
         id: commit
         run: |
-          git add pipeline/raw_scrape.tsv titles_with_years.tsv pipeline/matched.csv
+          git add pipeline/raw_scrape.tsv titles_with_years.tsv pipeline/matched.csv pipeline/flagged.json
           if git diff --cached --quiet; then
             echo "No changes to commit."
             echo "committed=false" >> "$GITHUB_OUTPUT"
