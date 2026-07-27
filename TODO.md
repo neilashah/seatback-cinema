@@ -7,20 +7,24 @@ Running list, updated as items close or new ones surface. See the latest
 
 ## Open
 
-- [ ] **Watch for repeat Cloudflare challenges on the local scrape.**
-      `push_scrape.sh` hit an HTTP 403 on 2026-07-25 — but this one wasn't
-      the GHA-IP-block issue (that's fixed); the response headers showed
-      `cf-mitigated: challenge` and a Cloudflare "Just a moment..."
-      interstitial, which no plain HTTP client can pass regardless of IP or
-      headers. Very likely triggered by this session's unusually heavy
-      testing volume that day (6-8+ scrapes of the same list in a few
-      hours) tripping Cloudflare's bot heuristics, not a standing block —
-      the safety floor correctly refused to push (0 titles scraped). Left
-      to self-resolve; check whether the next scheduled 9am launchd run
-      goes through cleanly. If this recurs on a normal once-daily cadence
-      (not heavy testing), that's a real signal and would need a more
-      robust scraper (e.g. headless-browser-based, to actually execute the
-      JS challenge) rather than waiting it out.
+- [ ] **The Cloudflare challenge is intermittent, not resolved — needs a
+      real decision, not another wait-and-see.** Timeline: 07-25 hit a full
+      block (0 titles, safety floor caught it, nothing shipped). Assumed
+      one-off from heavy testing volume and decided to wait. 07-26: a
+      *partial* success — page 1 (100 titles) got through, page 2 silently
+      failed — slipped past the old fixed "≥100" floor and actually
+      committed to `main`, dropping 89 titles (reverted; see Done). Fixed
+      that specific gap (percentage-based shrink check now in both
+      `push_scrape.sh` and `sync_catalog.py`), but immediately after,
+      re-scraping got fully blocked again (0 titles, page 1 itself 403'd).
+      So in the space of about a day: full block → partial pass → full
+      block again, with no obvious pattern. That's inconsistent with "heavy
+      testing volume that one day" as the sole explanation. Options worth
+      weighing next time this comes up: a headless-browser scraper
+      (Playwright) that can actually execute the JS challenge, vs. accepting
+      the current failure mode (safe — nothing ships when blocked or
+      partial — but membership sync becomes unreliable/silent until a
+      clean run gets through).
 - [ ] **Gate scope decision (§6a of the 07-18 handoff).** The agreement gate
       currently overrides any M value. `verdict-debug.csv` shows 8 gated
       titles; 7 have M ≥ 40 (Inception 45.3, Moonlight 52.4, Dark Knight 52.3,
@@ -187,3 +191,27 @@ Running list, updated as items close or new ones surface. See the latest
       to push). Decided to wait and see whether tomorrow's normal
       once-daily 9am run goes through cleanly rather than react now — see
       Open item — 2026-07-25.
+- [x] **Caught, reverted, and root-caused a real partial-scrape incident —
+      2026-07-26.** (Separately, a different session this morning also
+      diagnosed and fixed a macOS TCC permissions issue blocking launchd
+      from touching `~/Desktop`, moving the whole project to
+      `~/seatback-cinema` — see that commit's own message for the
+      writeup.) Neil asked to test `push_scrape.sh` again: it got page 1
+      (100 titles) but page 2 of the Letterboxd pagination silently
+      failed, and 100 titles cleared the old fixed "≥100" safety floor
+      easily. That went all the way to a real `sync-catalog.yml` commit on
+      `main` dropping 89 titles — caught immediately by checking the CI
+      run's own log (its "Trigger score refresh" step had failed, which is
+      what prompted a closer look). Live `catalog.json` was never
+      rebuilt/redeployed, so passengers were never served bad data.
+      **Reverted** the bad commit (`git revert`) within minutes. While
+      investigating, found and fixed a second, unrelated real bug:
+      `sync-catalog.yml` was missing `actions: write` permission (added it
+      to the old `watch-catalog.yml` last session, never to
+      `sync-catalog.yml` itself), which is why "Trigger score refresh" had
+      403'd. Fixed both: added the missing permission, and replaced the
+      fixed-floor check with a percentage-based shrink check (>20% drop
+      refuses to push/write) in both `push_scrape.sh` and, as an
+      independent second layer, `sync_catalog.py` itself. Re-scraping
+      immediately after got fully blocked again (0 titles) — see the Open
+      item above, this is not resolved, just safer to fail into.
