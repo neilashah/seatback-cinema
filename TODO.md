@@ -7,20 +7,32 @@ Running list, updated as items close or new ones surface. See the latest
 
 ## Open
 
-- [ ] **Confirm the nodriver switch actually helps, with a cooldown-period
-      test.** Swapped `lb_detail_scrape.py` from plain `urllib` to a real,
-      headful Chrome via `nodriver` (2026-07-26 — see Done and DEPLOY.md
-      §5a for the full story). Empirically: 2 clean passes back to back,
-      then 2 challenges that didn't clear — right after a day of heavy
-      repeated testing against the same URL, so the failures may just be
-      volume-driven rather than nodriver not working. Deliberately stopped
-      testing against the live site to let it cool down. Next real test:
-      let tomorrow's normal once-daily 9am `launchd` run be the judge,
-      without any manual runs in between muddying the signal. If it's
-      still failing most of the time under normal (non-testing) cadence,
-      that's the real answer — worth revisiting then, possibly with a paid
-      anti-bot API as the fallback (cost/complexity vs. reliability
-      tradeoff already discussed, deliberately not chosen yet).
+- [ ] **The nodriver switch is not clearly helping — 1 pass out of 4 tries
+      so far.** Swapped `lb_detail_scrape.py` from plain `urllib` to a
+      real, headful Chrome via `nodriver` on 2026-07-26 (see Done and
+      DEPLOY.md §5a). Track record since: 2 clean passes back to back
+      (07-26 afternoon, during initial testing), then 2 challenges that
+      didn't clear (07-26 evening, same testing session — plausibly
+      volume-driven). 2026-07-27: checked whether the scheduled 9am
+      `launchd` run had succeeded that morning — inconclusive from
+      `launchctl`/log evidence (last exit code was failure, but couldn't
+      cleanly confirm whether that reflected a real 9am firing or stale
+      state from the day before), but definitively **no new commit had
+      landed all day**. Ran `push_scrape.sh` manually as a fresh test
+      (first hit on the site in ~24h, not more of the prior day's
+      volume) — **it failed too**: challenged, didn't clear, 0 titles,
+      safety floor correctly refused to push. So: 2 of 4 real attempts
+      have passed. That's roughly consistent with the 55-70% success
+      ceiling the research quoted for even the best free tools against
+      Turnstile — not proof nodriver *isn't* helping (urllib was 0-for-a-
+      lot, hard-blocked every time), but not yet proof it's a solid fix
+      either. Keep tracking pass/fail per real attempt rather than
+      concluding either way from small samples. If the failure rate
+      stays high over more attempts, revisit the paid anti-bot API
+      fallback (cost/complexity tradeoff already discussed, deliberately
+      not chosen yet). Also worth checking directly: is the `launchd` job
+      actually firing at 9am daily at all? Today's evidence didn't
+      cleanly confirm it either way.
 - [ ] **Gate scope decision (§6a of the 07-18 handoff).** The agreement gate
       currently overrides any M value. `verdict-debug.csv` shows 8 gated
       titles; 7 have M ≥ 40 (Inception 45.3, Moonlight 52.4, Dark Knight 52.3,
