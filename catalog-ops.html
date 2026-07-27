@@ -205,15 +205,15 @@
     </div>
     <div class="stat">
       <p class="stat-label">Last scrape check</p>
-      <p class="stat-value">1:08 PM<small>Jul 25, local</small></p>
+      <p class="stat-value">5:46 PM<small>Jul 27, via ScraperAPI</small></p>
     </div>
     <div class="stat">
       <p class="stat-label">Last membership change</p>
-      <p class="stat-value">12:16 PM<small>Jul 25 · 189 titles</small></p>
+      <p class="stat-value">7:16 PM<small>Jul 26 · 189 titles</small></p>
     </div>
     <div class="stat">
-      <p class="stat-label">Local schedule</p>
-      <p class="stat-value good">Loaded<small>Daily · 9:00 AM</small></p>
+      <p class="stat-label">Schedule</p>
+      <p class="stat-value good">Automated<small>Daily · ~9 AM ET, GitHub Actions</small></p>
     </div>
   </div>
 
@@ -223,8 +223,8 @@
     <div class="section-head"><h2>Check for updates</h2></div>
     <div class="action-card">
       <div>
-        <h3>Run the catalog scrape check now</h3>
-        <p>Normally runs on its own every morning. Copy the instruction below and paste it into a Claude Code chat to run it right now instead of waiting — scrapes Em's Letterboxd list, and only pushes (kicking off the TMDB match + deploy) if it actually changed.</p>
+        <h3>Run the catalog sync now</h3>
+        <p>Normally runs on its own every morning, entirely on GitHub Actions — no laptop involved. Copy the instruction below and paste it into a Claude Code chat to trigger it right now instead of waiting: scrapes Em's Letterboxd list via ScraperAPI, matches against TMDB, and commits (kicking off the score refresh + deploy) if anything changed.</p>
       </div>
       <button class="btn btn-primary" id="runScrapeBtn">
         <span class="spinner"></span>
@@ -434,7 +434,7 @@
   }
 
   document.getElementById('runScrapeBtn').addEventListener('click', function(){
-    sendAction(this, 'Run push_scrape.sh now and tell me what it found — whether the list changed and, if so, what the sync produced.');
+    sendAction(this, 'Trigger sync-catalog.yml now (gh workflow run sync-catalog.yml) and tell me what it found — whether the list changed and, if so, what the sync produced.');
   });
 
   renderFlagged();
