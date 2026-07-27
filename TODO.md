@@ -7,24 +7,20 @@ Running list, updated as items close or new ones surface. See the latest
 
 ## Open
 
-- [ ] **The Cloudflare challenge is intermittent, not resolved — needs a
-      real decision, not another wait-and-see.** Timeline: 07-25 hit a full
-      block (0 titles, safety floor caught it, nothing shipped). Assumed
-      one-off from heavy testing volume and decided to wait. 07-26: a
-      *partial* success — page 1 (100 titles) got through, page 2 silently
-      failed — slipped past the old fixed "≥100" floor and actually
-      committed to `main`, dropping 89 titles (reverted; see Done). Fixed
-      that specific gap (percentage-based shrink check now in both
-      `push_scrape.sh` and `sync_catalog.py`), but immediately after,
-      re-scraping got fully blocked again (0 titles, page 1 itself 403'd).
-      So in the space of about a day: full block → partial pass → full
-      block again, with no obvious pattern. That's inconsistent with "heavy
-      testing volume that one day" as the sole explanation. Options worth
-      weighing next time this comes up: a headless-browser scraper
-      (Playwright) that can actually execute the JS challenge, vs. accepting
-      the current failure mode (safe — nothing ships when blocked or
-      partial — but membership sync becomes unreliable/silent until a
-      clean run gets through).
+- [ ] **Confirm the nodriver switch actually helps, with a cooldown-period
+      test.** Swapped `lb_detail_scrape.py` from plain `urllib` to a real,
+      headful Chrome via `nodriver` (2026-07-26 — see Done and DEPLOY.md
+      §5a for the full story). Empirically: 2 clean passes back to back,
+      then 2 challenges that didn't clear — right after a day of heavy
+      repeated testing against the same URL, so the failures may just be
+      volume-driven rather than nodriver not working. Deliberately stopped
+      testing against the live site to let it cool down. Next real test:
+      let tomorrow's normal once-daily 9am `launchd` run be the judge,
+      without any manual runs in between muddying the signal. If it's
+      still failing most of the time under normal (non-testing) cadence,
+      that's the real answer — worth revisiting then, possibly with a paid
+      anti-bot API as the fallback (cost/complexity vs. reliability
+      tradeoff already discussed, deliberately not chosen yet).
 - [ ] **Gate scope decision (§6a of the 07-18 handoff).** The agreement gate
       currently overrides any M value. `verdict-debug.csv` shows 8 gated
       titles; 7 have M ≥ 40 (Inception 45.3, Moonlight 52.4, Dark Knight 52.3,
@@ -215,3 +211,25 @@ Running list, updated as items close or new ones surface. See the latest
       independent second layer, `sync_catalog.py` itself. Re-scraping
       immediately after got fully blocked again (0 titles) — see the Open
       item above, this is not resolved, just safer to fail into.
+- [x] **Switched the Letterboxd scraper to a real browser (nodriver),
+      2026-07-26.** Researched options for passing Cloudflare's
+      Turnstile-based Managed Challenge (confirmed via response headers:
+      `cf-mitigated: challenge`) — no plain HTTP client can execute JS, so
+      headers/IP tricks were never going to be enough. Compared Nodriver,
+      SeleniumBase UC Mode, Playwright+stealth, FlareSolverr, and
+      cloudscraper; picked **Nodriver** (successor to
+      `undetected-chromedriver`) as the best-maintained free option.
+      Installed it, hit and fixed a real upstream packaging bug (a
+      mis-encoded byte in nodriver 0.50.3's bundled `cdp/network.py` broke
+      import entirely under Python 3.14's stricter source-encoding rules —
+      documented the one-line fix in DEPLOY.md §5a). Tested headless vs.
+      headful: headless still got challenged, **headful (a real, visible
+      Chrome window) passed cleanly** across a live 2-page pagination test
+      (100 + 89 = 189, matching the last known-good count exactly).
+      Rewrote `lb_detail_scrape.py` around it — same CLI contract (stdout
+      TSV, stderr progress), so `push_scrape.sh` needed zero changes. Bonus:
+      the real rendered DOM exposes cleaner `data-item-name`/`data-item-slug`
+      pairs than the old raw-HTML approach ever had, replacing a
+      three-way alt-text/attribute/anchor fallback chain with one regex.
+      Not a guaranteed fix — see the Open item above for the honest
+      reliability picture (2 passes, then 2 challenges, same day).

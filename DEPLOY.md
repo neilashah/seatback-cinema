@@ -142,8 +142,13 @@ automated, in two stages that deliberately run in different places:
    blocked immediately). TMDB/MDBList/Trakt are unaffected; this is
    Letterboxd-specific. The script scrapes the list, and if it differs from
    the committed `pipeline/raw_scrape.tsv`, commits and pushes just that
-   file. A basic sanity floor (fewer than 100 titles scraped) refuses to
-   push, so a blocked/broken scrape can't look like "the list went empty."
+   file. Two safety checks refuse to push a broken scrape: an absolute
+   floor (fewer than 100 titles) and a percentage check against the last
+   known-good count (>20% shrink) — added 2026-07-26 after a partial scrape
+   (100 titles from page 1 only, page 2 silently failed) cleared the old
+   fixed floor and actually shipped a shrunk catalog for a few minutes
+   before being caught and reverted. See §5a for why the scraper itself
+   changed that same day.
 2. **That push triggers `sync-catalog.yml`** (a GitHub Actions `on: push`
    trigger, scoped to `pipeline/raw_scrape.tsv`), which runs the TMDB match
    (`overrides.csv` still applies first) and **splits the result**: titles
@@ -167,6 +172,48 @@ about it changed. `sync_catalog.py` is the matching half of that same
 pipeline with the clean/flagged split layered on top, just reading
 `pipeline/raw_scrape.tsv` instead of re-scraping itself; its docstring has
 the exact logic and a couple of known edge cases worth knowing about.
+
+### 5a. Why `lb_detail_scrape.py` drives a real browser
+
+Realistic headers got requests past Letterboxd for a while, but Letterboxd
+sits behind Cloudflare, and Cloudflare's Turnstile-based Managed Challenge
+(confirmed via response headers 2026-07-25/26 — `cf-mitigated: challenge`,
+a "Just a moment..." interstitial) requires actually executing JavaScript
+to pass. No plain HTTP client can do that, on any IP, once it's triggered.
+
+`lb_detail_scrape.py` now drives a real Chrome via
+[nodriver](https://github.com/UltrafunkAmsterdam/nodriver) (successor to
+`undetected-chromedriver`), **in headful mode** — `headless=True` still got
+challenged in testing, `headless=False` (a real, visible window) passed
+consistently. Expect a Chrome window to briefly appear during the
+scheduled scrape; that's normal, not a bug.
+
+**Not 100% reliable.** Even the best current free tools against Turnstile
+land around 55-70% success in independent testing — this is a real
+ceiling, not a bug in this setup. Confirmed empirically 2026-07-26: two
+clean passes back to back, then two challenges that didn't clear, quite
+possibly worsened by how much this exact URL got hit that same day testing
+it. The existing safety floors (§5) mean a failed/challenged run is
+harmless — it just skips that day's sync — so this is an acceptable
+trade, not a blocker. If reliability becomes a real problem, a paid
+anti-bot API (ScraperAPI, ZenRows, Bright Data Web Unlocker) is the
+fallback that was deliberately not chosen here (cost/complexity vs. a
+once-daily personal scrape).
+
+**Setup:** `pip install nodriver`, plus a real Chrome install (not just
+Chromium) for it to drive. Known packaging bug in nodriver 0.50.3: a
+mis-encoded byte in its bundled `cdp/network.py` (`\xb1Inf` in a comment)
+throws a `SyntaxError` on import under Python 3.14's stricter
+source-encoding handling. If you hit this, patch the installed file
+(check whether a newer nodriver release has fixed it first):
+
+```
+python3 -c "
+p = '<path to>/site-packages/nodriver/cdp/network.py'
+d = open(p, 'rb').read()
+open(p, 'wb').write(d.replace(b'\xb1Inf', b'+/-Inf'))
+"
+```
 
 ### Installing the local schedule
 
