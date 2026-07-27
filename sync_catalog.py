@@ -17,14 +17,15 @@ SPLITS the result:
     reappearing on every future run until an overrides.csv entry resolves
     them one way or the other — see DEPLOY.md §5.
 
-Note this script does NOT do the Letterboxd scrape itself (that used to be
-a subprocess call to lb_detail_scrape.py here, but Letterboxd blocks
-requests from GitHub Actions' runner IPs with a 403 even with realistic
-browser headers — confirmed 2026-07-25 — so the scrape can't run in CI at
-all). push_scrape.sh runs the scrape from a real machine instead and pushes
-pipeline/raw_scrape.tsv when it changes; that push is what triggers this
-script in CI. Running lb_detail_scrape.py by hand and pointing this at its
-output works identically for a local/manual run.
+Note this script does NOT do the Letterboxd scrape itself — that's a
+separate step in the same CI job (sync-catalog.yml), since ScraperAPI
+handles the actual Cloudflare bypass on its own infrastructure and can be
+called from anywhere, including this runner. (Earlier versions of this
+pipeline had the scrape happen locally via push_scrape.sh + launchd,
+because Letterboxd flatly blocks GitHub Actions runner IPs and, later, a
+local headful-Chrome scraper proved unreliable — see DEPLOY.md §5 for the
+full history.) Running lb_detail_scrape.py by hand and pointing this at
+its output works identically for a local/manual run.
 
 Known limitation: if a title that matched cleanly on a previous run becomes
 ambiguous on a later run (e.g. TMDB gains a same-title collision film), it

@@ -128,109 +128,91 @@ from the Actions tab resets that clock.
 
 ---
 
-## 5. The membership sync (`push_scrape.sh` → `sync-catalog.yml`)
+## 5. The membership sync (`sync-catalog.yml`)
 
 Adding/removing titles used to be a fully manual step (re-run the scrape,
-re-run the TMDB matcher, eyeball the output, commit). It's now mostly
-automated, in two stages that deliberately run in different places:
+re-run the TMDB matcher, eyeball the output, commit). It's now fully
+automated, running daily (~9am Eastern, `workflow_dispatch` also available
+for an on-demand run) entirely in GitHub Actions:
 
-1. **`push_scrape.sh` runs locally** (your machine, on a schedule via
-   launchd — see `com.seatback-cinema.push-scrape.plist`), because it has
-   to: **Letterboxd blocks GitHub Actions runner IPs with a 403**, even with
-   realistic browser headers (confirmed 2026-07-25 — both scheduled
-   `watch-catalog.yml` runs and a manual `sync-catalog.yml` run all got
-   blocked immediately). TMDB/MDBList/Trakt are unaffected; this is
-   Letterboxd-specific. The script scrapes the list, and if it differs from
-   the committed `pipeline/raw_scrape.tsv`, commits and pushes just that
-   file. Two safety checks refuse to push a broken scrape: an absolute
-   floor (fewer than 100 titles) and a percentage check against the last
-   known-good count (>20% shrink) — added 2026-07-26 after a partial scrape
-   (100 titles from page 1 only, page 2 silently failed) cleared the old
-   fixed floor and actually shipped a shrunk catalog for a few minutes
-   before being caught and reverted. See §5a for why the scraper itself
-   changed that same day.
-2. **That push triggers `sync-catalog.yml`** (a GitHub Actions `on: push`
-   trigger, scoped to `pipeline/raw_scrape.tsv`), which runs the TMDB match
-   (`overrides.csv` still applies first) and **splits the result**: titles
-   that matched cleanly (`auto`/`override` tier) are committed straight to
-   `titles_with_years.tsv` + `matched.csv` on `main`, which then triggers
-   `refresh-catalog.yml` to rebuild `catalog.json` and redeploy — no human
-   step at all for the common case. Titles the matcher wasn't confident
-   about (`review`/`fuzzy`/`miss` tier — a remake collision, no year to
+1. **Scrapes the Letterboxd list** (`lb_detail_scrape.py`) via
+   [ScraperAPI](https://scraperapi.com) — see §5a for why a plain request
+   can't do this directly. Two safety checks refuse to proceed on a broken
+   scrape: an absolute floor (fewer than 100 titles) and a percentage
+   check against the last known-good count (>20% shrink).
+2. **Matches every title against TMDB** (`sync_catalog.py`, `overrides.csv`
+   applies first) and **splits the result**: titles that matched cleanly
+   (`auto`/`override` tier) are committed straight to `titles_with_years.tsv`
+   + `matched.csv` on `main`, which then triggers `refresh-catalog.yml` to
+   rebuild `catalog.json` and redeploy — no human step at all for the
+   common case. Titles the matcher wasn't confident about
+   (`review`/`fuzzy`/`miss` tier — a remake collision, no year to
    disambiguate, nothing plausible on TMDB) are held *out* of the catalog
    entirely and surfaced as a `catalog-needs-review` GitHub issue instead,
    so a bad guess can't ship unreviewed. They keep reappearing on every
    future sync until an `overrides.csv` entry resolves them — add a line
-   there (see the file's own header for the format) and the next sync picks
-   it up cleanly. `sync-catalog.yml` also has `workflow_dispatch` for an
-   on-demand run against whatever's already in `pipeline/raw_scrape.tsv`.
+   there (see the file's own header for the format) and the next sync
+   picks it up cleanly.
 
 The old fully-manual path (`python3 lb_detail_scrape.py > titles_with_years.tsv`
 then `python3 delta_ic_match.py titles_with_years.tsv > pipeline/matched.csv`)
 still works if you want a full title-by-title look before shipping — nothing
-about it changed. `sync_catalog.py` is the matching half of that same
+about it changed, though `lb_detail_scrape.py` now needs `SCRAPERAPI_KEY`
+set (see §5a). `sync_catalog.py` is the matching half of that same
 pipeline with the clean/flagged split layered on top, just reading
 `pipeline/raw_scrape.tsv` instead of re-scraping itself; its docstring has
 the exact logic and a couple of known edge cases worth knowing about.
 
-### 5a. Why `lb_detail_scrape.py` drives a real browser
+**History, briefly** (full story in `TODO.md` if you want the blow-by-blow):
+this used to run in two stages in two different places — a local script
+(`push_scrape.sh`) scheduled via `launchd` did the scrape, because
+Letterboxd blocks GitHub Actions runner IPs directly with a 403, and its
+push triggered this workflow to do everything else. That local scraper
+first used plain HTTP requests, then a real headful Chrome (`nodriver`)
+once Cloudflare's Managed Challenge made plain requests stop working
+reliably — but the headful-Chrome approach itself proved unreliable (see
+§5a) and meant the whole sync depended on a laptop being on and awake at
+9am. Switching to ScraperAPI (2026-07-27) fixed both problems at once:
+their infrastructure handles the actual Cloudflare bypass, so the request
+can come from anywhere — including this workflow, right here in CI. The
+local script and `launchd` job are retired.
 
-Realistic headers got requests past Letterboxd for a while, but Letterboxd
-sits behind Cloudflare, and Cloudflare's Turnstile-based Managed Challenge
-(confirmed via response headers 2026-07-25/26 — `cf-mitigated: challenge`,
-a "Just a moment..." interstitial) requires actually executing JavaScript
-to pass. No plain HTTP client can do that, on any IP, once it's triggered.
+### 5a. Why the scrape goes through ScraperAPI
 
-`lb_detail_scrape.py` now drives a real Chrome via
-[nodriver](https://github.com/UltrafunkAmsterdam/nodriver) (successor to
-`undetected-chromedriver`), **in headful mode** — `headless=True` still got
-challenged in testing, `headless=False` (a real, visible window) passed
-consistently. Expect a Chrome window to briefly appear during the
-scheduled scrape; that's normal, not a bug.
+Letterboxd sits behind Cloudflare, and Cloudflare's Turnstile-based
+Managed Challenge (confirmed via response headers 2026-07-25/26 —
+`cf-mitigated: challenge`, a "Just a moment..." interstitial) requires
+actually executing JavaScript to pass. No plain HTTP client can do that,
+on any IP, once it's triggered — a real local headful Chrome (via
+`nodriver`) got past it sometimes (2 clean passes in initial testing) but
+not reliably (2 later failures the same day, then another the day after) —
+roughly matching the 55-70% success ceiling independent research found for
+even the best free anti-bot tools against Turnstile. It also only ran
+locally, tying the whole sync to a laptop being on.
 
-**Not 100% reliable.** Even the best current free tools against Turnstile
-land around 55-70% success in independent testing — this is a real
-ceiling, not a bug in this setup. Confirmed empirically 2026-07-26: two
-clean passes back to back, then two challenges that didn't clear, quite
-possibly worsened by how much this exact URL got hit that same day testing
-it. The existing safety floors (§5) mean a failed/challenged run is
-harmless — it just skips that day's sync — so this is an acceptable
-trade, not a blocker. If reliability becomes a real problem, a paid
-anti-bot API (ScraperAPI, ZenRows, Bright Data Web Unlocker) is the
-fallback that was deliberately not chosen here (cost/complexity vs. a
-once-daily personal scrape).
+[ScraperAPI](https://scraperapi.com) handles the Cloudflare bypass on
+*their* infrastructure — `lb_detail_scrape.py` just makes a plain HTTPS
+request to their API with the target URL as a parameter (`render=true`),
+and they return the final rendered HTML. Confirmed clean on the first
+attempt for both pages of this list (2026-07-27), 189/189 titles, no
+retries needed. Bonus: the rendered DOM exposes cleaner data than the old
+raw-HTML approach ever had — `data-item-name` carries "Title (Year)" and
+`data-item-slug` sits on the same tag, replacing a three-way
+alt-text/attribute/anchor fallback chain with one regex.
 
-**Setup:** `pip install nodriver`, plus a real Chrome install (not just
-Chromium) for it to drive. Known packaging bug in nodriver 0.50.3: a
-mis-encoded byte in its bundled `cdp/network.py` (`\xb1Inf` in a comment)
-throws a `SyntaxError` on import under Python 3.14's stricter
-source-encoding handling. If you hit this, patch the installed file
-(check whether a newer nodriver release has fixed it first):
+**Setup:** sign up at [scraperapi.com](https://scraperapi.com) (free tier:
+1,000 credits/month, recurring — this project's volume, ~3 requests/day,
+fits comfortably inside it) and set the API key as the `SCRAPERAPI_KEY`
+secret (`gh secret set SCRAPERAPI_KEY`, or via the repo's Settings →
+Secrets page). For a local/manual run, `export SCRAPERAPI_KEY=...` first.
 
-```
-python3 -c "
-p = '<path to>/site-packages/nodriver/cdp/network.py'
-d = open(p, 'rb').read()
-open(p, 'wb').write(d.replace(b'\xb1Inf', b'+/-Inf'))
-"
-```
-
-### Installing the local schedule
-
-`com.seatback-cinema.push-scrape.plist` is a launchd job template (daily,
-9am local by default — edit the `Hour`/`Minute` keys to change it). To
-activate it:
-
-```
-cp "com.seatback-cinema.push-scrape.plist" ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.seatback-cinema.push-scrape.plist
-```
-
-launchd only fires while the machine is awake; a missed run (asleep/off at
-9am) generally catches up shortly after wake, but isn't guaranteed. To stop
-it: `launchctl unload ~/Library/LaunchAgents/com.seatback-cinema.push-scrape.plist`.
-Logs land at `/tmp/seatback-push-scrape.log`. The script is also just a
-normal shell script — running it by hand any time is fine.
+Not guaranteed to be 100% reliable forever, but categorically different
+from the local-browser approach: the bypass work happens on ScraperAPI's
+side regardless of where the request comes from, so there's no "did my
+laptop happen to be awake" variable anymore, and no local Chrome/nodriver
+dependency. If this ever becomes unreliable, the fallback is a
+higher-tier ScraperAPI plan or a comparable service (ZenRows, Bright Data
+Web Unlocker) — not a return to local scraping.
 
 ---
 

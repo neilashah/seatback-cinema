@@ -7,32 +7,6 @@ Running list, updated as items close or new ones surface. See the latest
 
 ## Open
 
-- [ ] **The nodriver switch is not clearly helping — 1 pass out of 4 tries
-      so far.** Swapped `lb_detail_scrape.py` from plain `urllib` to a
-      real, headful Chrome via `nodriver` on 2026-07-26 (see Done and
-      DEPLOY.md §5a). Track record since: 2 clean passes back to back
-      (07-26 afternoon, during initial testing), then 2 challenges that
-      didn't clear (07-26 evening, same testing session — plausibly
-      volume-driven). 2026-07-27: checked whether the scheduled 9am
-      `launchd` run had succeeded that morning — inconclusive from
-      `launchctl`/log evidence (last exit code was failure, but couldn't
-      cleanly confirm whether that reflected a real 9am firing or stale
-      state from the day before), but definitively **no new commit had
-      landed all day**. Ran `push_scrape.sh` manually as a fresh test
-      (first hit on the site in ~24h, not more of the prior day's
-      volume) — **it failed too**: challenged, didn't clear, 0 titles,
-      safety floor correctly refused to push. So: 2 of 4 real attempts
-      have passed. That's roughly consistent with the 55-70% success
-      ceiling the research quoted for even the best free tools against
-      Turnstile — not proof nodriver *isn't* helping (urllib was 0-for-a-
-      lot, hard-blocked every time), but not yet proof it's a solid fix
-      either. Keep tracking pass/fail per real attempt rather than
-      concluding either way from small samples. If the failure rate
-      stays high over more attempts, revisit the paid anti-bot API
-      fallback (cost/complexity tradeoff already discussed, deliberately
-      not chosen yet). Also worth checking directly: is the `launchd` job
-      actually firing at 9am daily at all? Today's evidence didn't
-      cleanly confirm it either way.
 - [ ] **Gate scope decision (§6a of the 07-18 handoff).** The agreement gate
       currently overrides any M value. `verdict-debug.csv` shows 8 gated
       titles; 7 have M ≥ 40 (Inception 45.3, Moonlight 52.4, Dark Knight 52.3,
@@ -61,13 +35,19 @@ Running list, updated as items close or new ones surface. See the latest
       before editing.
 - [ ] **Decide where the non-deploy pipeline scripts belong** —
       `catalog-ops.html`, `delta_ic_match.py`, `diag.py`, `lb_detail_scrape.py`,
-      `overrides.csv`, `overrides.numbers`, `probe_mi.js`, `push_scrape.sh`,
-      `sync_catalog.py`, `titles.tsv`, `titles_with_years.tsv`, `triage.py`.
-      Currently at repo root; not part of `DEPLOY.md`'s repo tree. Fine
-      as-is, but worth a deliberate call (e.g., a `matching/` folder) rather
-      than leaving it implicit — more pressing now that CI (not just local
-      runs) depends on these paths, so a move means updating the workflow
-      files too.
+      `overrides.csv`, `overrides.numbers`, `probe_mi.js`, `sync_catalog.py`,
+      `titles.tsv`, `titles_with_years.tsv`, `triage.py`. Currently at repo
+      root; not part of `DEPLOY.md`'s repo tree. Fine as-is, but worth a
+      deliberate call (e.g., a `matching/` folder) rather than leaving it
+      implicit — more pressing now that CI (not just local runs) depends on
+      these paths, so a move means updating the workflow files too.
+- [ ] **Track ScraperAPI's real-world reliability and free-tier usage.**
+      Switched the scrape to ScraperAPI 2026-07-27 (see Done) — clean on
+      the first attempt in testing, but that's one data point. Worth
+      checking after a few weeks of the daily schedule: is it still
+      passing reliably, and is usage staying comfortably inside the free
+      1,000-credits/month tier (expected ~90/month at 1 request/day, more
+      on days sync-catalog.yml is manually re-run)?
 - [ ] **Keep `catalog-ops.html` in sync with the published Artifact.** The
       committed copy is a point-in-time source snapshot, not a live link —
       if the published dashboard gets edited/republished in a future
@@ -243,5 +223,40 @@ Running list, updated as items close or new ones surface. See the latest
       the real rendered DOM exposes cleaner `data-item-name`/`data-item-slug`
       pairs than the old raw-HTML approach ever had, replacing a
       three-way alt-text/attribute/anchor fallback chain with one regex.
-      Not a guaranteed fix — see the Open item above for the honest
-      reliability picture (2 passes, then 2 challenges, same day).
+      Not a guaranteed fix — turned out to still be unreliable (see next
+      two entries); superseded by the ScraperAPI switch below.
+- [x] **nodriver's real track record: 2 passes out of 4 tries, then
+      retired.** 2026-07-26: 2 clean passes back to back during initial
+      testing, then 2 challenges that didn't clear later the same day
+      (plausibly volume-driven from testing so much). 2026-07-27: checked
+      whether the scheduled 9am `launchd` run had succeeded that morning —
+      no new commit had landed all day, and `launchctl`/log evidence
+      couldn't cleanly confirm whether the job had even fired. Ran
+      `push_scrape.sh` manually as a fresh (non-testing-volume) data
+      point — it failed too. 2 of 4 real attempts passed, roughly matching
+      the 55-70% ceiling independent research found for even the best free
+      tools against Turnstile. Decided this wasn't reliable enough and
+      looked into paid alternatives instead of continuing to tune it.
+- [x] **Switched to ScraperAPI, moved the scrape back into GitHub Actions,
+      retired the local scraper entirely — 2026-07-27.** Confirmed the
+      free tier's pricing/limits first (1,000 credits/month, recurring —
+      this project's ~90 requests/month fits easily) before signing up.
+      Tested directly against the real list before changing any code:
+      clean 200 on the first attempt for both pages, 189/189 titles,
+      matching the last known-good count exactly — no retries needed,
+      unlike nodriver's 50/50 record. Rewrote `lb_detail_scrape.py` around
+      a plain HTTPS call to ScraperAPI's API (`render=true`) instead of
+      driving a local browser — simpler code, no more `nodriver`/Chrome
+      dependency (uninstalled `nodriver` locally). Key insight that
+      reshaped the whole architecture: since the actual Cloudflare bypass
+      happens on ScraperAPI's infrastructure, not the caller's IP, the
+      request can come from anywhere — including GitHub Actions. Rebuilt
+      `sync-catalog.yml` to scrape + match + commit in one scheduled daily
+      workflow (~9am Eastern), added `SCRAPERAPI_KEY` as a repo secret,
+      and retired `push_scrape.sh` + the `launchd` job entirely (unloaded,
+      uninstalled, deleted from the repo) — the whole reason they existed
+      (Letterboxd blocking GHA IPs directly) is now moot, since ScraperAPI
+      is what actually reaches Letterboxd. This also directly fixes the
+      "laptop is often off in the morning" problem — the sync no longer
+      depends on any local machine being on at all. DEPLOY.md §5/§5a
+      rewritten for the new architecture.
