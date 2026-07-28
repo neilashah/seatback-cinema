@@ -42,12 +42,19 @@ Running list, updated as items close or new ones surface. See the latest
       implicit — more pressing now that CI (not just local runs) depends on
       these paths, so a move means updating the workflow files too.
 - [ ] **Track ScraperAPI's real-world reliability and free-tier usage.**
-      Switched the scrape to ScraperAPI 2026-07-27 (see Done) — clean on
-      the first attempt in testing, but that's one data point. Worth
-      checking after a few weeks of the daily schedule: is it still
-      passing reliably, and is usage staying comfortably inside the free
-      1,000-credits/month tier (expected ~90/month at 1 request/day, more
-      on days sync-catalog.yml is manually re-run)?
+      Switched the scrape to ScraperAPI 2026-07-27. Track record so far:
+      2 clean manual tests (07-27), then the **first real scheduled
+      (`schedule`-triggered, not manual) run on 07-28 failed** — ScraperAPI's
+      own endpoint returned HTTP 500 three times in a row (not a
+      Cloudflare-challenge marker, not an auth/quota error). Safety floor
+      correctly refused at 0 titles, nothing shipped. A manual retry
+      minutes later succeeded cleanly (189 titles, 0 flagged), confirming
+      it was a transient ScraperAPI-side error, not a recurring block. 3 of
+      4 real attempts have now passed. No code change made in response to a
+      single transient 500 — keep watching for a pattern before reacting.
+      Also still worth checking free-tier usage stays comfortably inside
+      1,000 credits/month (expected ~90/month at 1 request/day, more on
+      days sync-catalog.yml is manually re-run).
 - [ ] **Keep `catalog-ops.html` in sync with the published Artifact.** The
       committed copy is a point-in-time source snapshot, not a live link —
       if the published dashboard gets edited/republished in a future
