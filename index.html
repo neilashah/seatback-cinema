@@ -39,6 +39,8 @@
   .refresh-btn.spinning svg{ animation:spin 0.8s linear infinite; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
 
+  .last-updated{ margin:8px 0 0; font-size:11px; color:var(--text-faint); }
+
   .tabbar{ display:flex; gap:4px; margin-top:14px; background:var(--surface); border-radius:11px; padding:3px; }
   .tab{ flex:1; text-align:center; padding:8px 4px; border-radius:9px; font-size:12.5px; font-weight:600;
     color:var(--text-faint); cursor:pointer; transition:background .15s, color .15s; }
@@ -53,7 +55,7 @@
     border-radius:8px; padding:1px 6px; margin-left:2px; }
   .sort-label{ font-size:11.5px; color:var(--text-faint); }
 
-  #results{ flex:1; padding:8px 12px 90px; }
+  .result-list{ flex:1; padding:8px 12px 90px; }
   .row{ display:flex; align-items:center; gap:12px; padding:9px 6px; border-radius:12px; cursor:pointer; }
   .row:active{ background:var(--surface); }
   .thumb{ width:42px; height:62px; border-radius:6px; background:var(--surface-2); flex-shrink:0; object-fit:cover; display:block; }
@@ -166,14 +168,17 @@
         </svg>
       </button>
     </div>
+    <p class="last-updated" id="lastUpdated" style="display:none;"></p>
     <div class="tabbar">
       <div class="tab active" data-tab="browse" tabindex="0" role="button">Browse</div>
       <div class="tab" data-tab="new" tabindex="0" role="button">New This Month</div>
-      <div class="tab" data-tab="search" tabindex="0" role="button">Search</div>
     </div>
   </div>
 
   <div id="browsePane">
+    <div class="search-wrap">
+      <input id="searchInput" type="text" placeholder="Search this flight's catalog" autocomplete="off">
+    </div>
     <div class="filter-row">
       <div class="filter-row-left">
         <div class="filter-btn" id="openFilters" tabindex="0" role="button">
@@ -190,19 +195,12 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
     </div>
-    <div id="results"></div>
-  </div>
-
-  <div id="searchPane" style="display:none;">
-    <div class="search-wrap">
-      <input id="searchInput" type="text" placeholder="Search this flight's catalog" autocomplete="off">
-    </div>
-    <div id="searchResults"></div>
+    <div id="results" class="result-list"></div>
   </div>
 
   <div id="newPane" style="display:none;">
     <div class="filter-row"><div class="sort-label">Added this month</div></div>
-    <div id="newResults"></div>
+    <div id="newResults" class="result-list"></div>
   </div>
 
   <div class="sheet-backdrop" id="sheetBackdrop"></div>
@@ -280,6 +278,7 @@
 // ---------------------------------------------------------------------------
 let MOVIES = [];
 const CATALOG_URL = 'catalog.json';
+const LAST_UPDATED_URL = 'last-updated.json';
 
 
 // Tier thresholds (Acclaimed/Liked/Mixed/Panned cutoffs) come from
@@ -441,6 +440,7 @@ function renderRow(m, highlightQuery){
 const SORT_OPTIONS = {
   rating:  { label:"Rating",       compare:(a,b) => (ratingPct(b, currentRating) ?? -1) - (ratingPct(a, currentRating) ?? -1) },
   runtime: { label:"Runtime",      sub:"Shortest first", compare:(a,b) => (a.runtime ?? Infinity) - (b.runtime ?? Infinity) },
+  year:    { label:"Release Year", sub:"Newest first",   compare:(a,b) => (b.year ?? -Infinity) - (a.year ?? -Infinity) },
   alpha:   { label:"Alphabetical", sub:"A to Z",         compare:(a,b) => a.title.localeCompare(b.title) },
 };
 let currentSort = 'rating';
@@ -507,7 +507,7 @@ ratingOptionsEl.addEventListener('click', (e) => {
 // Tap a score badge to expand/collapse its breakdown (5-source mini-ring
 // strip + MI verdict line). Row taps otherwise do nothing — there's no
 // detail view; the row + breakdown is the whole story for this app.
-['results', 'searchResults', 'newResults'].forEach(id => {
+['results', 'newResults'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     const badge = e.target.closest('.score-badge');
     if (!badge) return;
@@ -525,22 +525,17 @@ function renderNew(){
 }
 
 const searchInput = document.getElementById('searchInput');
-const searchResults = document.getElementById('searchResults');
-function renderSearch(q){
-  if (!q){ searchResults.innerHTML = MOVIES.map(m => renderRow(m)).join(''); return; }
-  const matches = MOVIES.filter(m => m.title.toLowerCase().includes(q.toLowerCase()));
-  searchResults.innerHTML = matches.length
-    ? matches.map(m => renderRow(m, q)).join('')
-    : `<div class="empty">No matches in this flight's catalog for "${q}".</div>`;
-}
-searchInput.addEventListener('input', () => renderSearch(searchInput.value.trim()));
+let currentSearchQuery = '';
+searchInput.addEventListener('input', () => {
+  currentSearchQuery = searchInput.value.trim();
+  applyFiltersToResults();
+});
 
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('browsePane').style.display = tab.dataset.tab === 'browse' ? '' : 'none';
-    document.getElementById('searchPane').style.display = tab.dataset.tab === 'search' ? '' : 'none';
     document.getElementById('newPane').style.display = tab.dataset.tab === 'new' ? '' : 'none';
   });
 });
@@ -623,8 +618,10 @@ function applyFiltersToResults(){
   const tiers = selectedVals('tier');
   const miscs = selectedVals('misc');
   const runtimeCap = Number(runtimeSlider.value);
+  const q = currentSearchQuery.toLowerCase();
 
   const filtered = sortMovies(MOVIES.filter(m => {
+    if (q && !m.title.toLowerCase().includes(q)) return false;
     if (genres.length && !genres.includes(m.genre)) return false;
     if (tiers.length && !tiers.includes(tierOf(m.is))) return false;
     if (miscs.length && !(m.misc && miscs.includes(m.misc))) return false;
@@ -632,9 +629,13 @@ function applyFiltersToResults(){
     return true;
   }));
 
+  const emptyMsg = currentSearchQuery
+    ? `No titles on this flight match "${currentSearchQuery}"${ (genres.length||tiers.length||miscs.length||runtimeCap<RUNTIME_MAX) ? ' and your filters' : '' }.`
+    : `No titles on this flight match those filters.`;
+
   document.getElementById('results').innerHTML = filtered.length
-    ? filtered.map(m => renderRow(m)).join('')
-    : `<div class="empty">No titles on this flight match those filters.</div>`;
+    ? filtered.map(m => renderRow(m, currentSearchQuery)).join('')
+    : `<div class="empty">${emptyMsg}</div>`;
 
   const activeCount = genres.length + tiers.length + miscs.length + (runtimeCap < RUNTIME_MAX ? 1 : 0);
   const badge = document.getElementById('filterCount');
@@ -657,8 +658,7 @@ function renderAll(){
   applyRuntimeBounds();
   updateRuntimeLabel();
   buildChips();
-  applyFiltersToResults();  // browse pane, default sort + no filters
-  renderSearch('');
+  applyFiltersToResults();  // browse pane, default sort + no filters + no search
   renderNew();
 }
 
@@ -697,12 +697,36 @@ async function loadCatalog(force){
   }
 }
 
+// last-updated.json only ever changes when the movie list itself changes
+// (see sync-catalog.yml) — not on score refreshes, not on scrape noise —
+// so this is specifically "when did the catalog last actually change,"
+// not "when did we last check." Failing quietly (missing file, offline
+// with nothing cached yet, etc.) just leaves the indicator hidden; it's a
+// nicety, never something that should block or clutter the main screen.
+const lastUpdatedEl = document.getElementById('lastUpdated');
+async function loadLastUpdated(force){
+  try {
+    const opts = { cache: 'no-cache' };
+    if (force) opts.headers = { 'X-Seatback-Refresh': '1' };
+    const res = await fetch(LAST_UPDATED_URL, opts);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { titlesUpdatedAt } = await res.json();
+    const d = new Date(titlesUpdatedAt);
+    if (isNaN(d)) throw new Error('bad timestamp');
+    const formatted = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    lastUpdatedEl.textContent = `Catalog updated ${formatted}`;
+    lastUpdatedEl.style.display = '';
+  } catch (err) {
+    console.warn('last-updated.json unavailable:', err.message);
+  }
+}
+
 const refreshBtn = document.getElementById('refreshBtn');
 if (refreshBtn){
   refreshBtn.addEventListener('click', async () => {
     if (refreshBtn.classList.contains('spinning')) return;
     refreshBtn.classList.add('spinning');
-    await loadCatalog(true);
+    await Promise.all([loadCatalog(true), loadLastUpdated(true)]);
     refreshBtn.classList.remove('spinning');
   });
 }
@@ -717,6 +741,7 @@ function maybeAutoRefresh(){
   if (Date.now() - lastAutoRefresh < 60000) return;
   lastAutoRefresh = Date.now();
   loadCatalog(true);
+  loadLastUpdated(true);
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') maybeAutoRefresh();
@@ -748,6 +773,7 @@ if ('serviceWorker' in navigator){
 
 document.getElementById('results').innerHTML = `<div class="empty">Loading this flight's catalog…</div>`;
 loadCatalog();
+loadLastUpdated();
 
 // Keyboard parity: Enter/Space activate any custom (div-based) control the
 // same way a click would, since role="button" alone doesn't give that for free.

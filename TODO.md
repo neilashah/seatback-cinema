@@ -62,6 +62,14 @@ Running list, updated as items close or new ones surface. See the latest
 
 ## Reminders (standing, not one-time)
 
+- **First real `last-updated.json` write is still pending.** It only gets
+  created on the next `sync-catalog.yml` run where
+  `titles_with_years.tsv`/`pipeline/matched.csv` actually change (see
+  Done). Until then the app's "last updated" indicator stays hidden on a
+  first-ever deploy where the file has never existed — that's expected,
+  not a bug; confirm it appears correctly once a real membership change
+  lands.
+
 - **Bump `CACHE_VERSION` in `sw.js`** on any deploy that changes
   `index.html`, `scoring.js`, or the icons. `catalog.json` is exempt.
 - **`scoring.js` is shared with Impure Cinema.** Any scoring change ships to
@@ -267,3 +275,36 @@ Running list, updated as items close or new ones surface. See the latest
       "laptop is often off in the morning" problem — the sync no longer
       depends on any local machine being on at all. DEPLOY.md §5/§5a
       rewritten for the new architecture.
+- [x] **Three app-side improvements — 2026-07-28.**
+      1. **"Last updated" indicator.** Deliberately tracks only real
+         membership changes, not score refreshes or scrape/flag noise:
+         `sync-catalog.yml`'s "Commit clean-tier titles" step now does a
+         second, narrower diff check specifically on
+         `titles_with_years.tsv`/`pipeline/matched.csv`, and only then
+         writes root-level `last-updated.json`
+         (`{"titlesUpdatedAt": "<UTC ISO8601>"}`) into the same commit.
+         `sw.js` gives it the same stale-while-revalidate treatment as
+         `catalog.json` (`CACHE_VERSION` bumped to `v3`); `index.html`
+         fetches it alongside the catalog and shows "Catalog updated
+         Jul 26" under the header, failing silently (indicator just stays
+         hidden) if the file's ever missing or unreachable.
+      2. **"Release Year" added to the sort menu** — a `year` entry in
+         `SORT_OPTIONS` modeled directly on the existing `runtime` entry,
+         newest-first, missing years sink to the bottom. No other code
+         changes needed; the sort sheet and comparator both already
+         iterate `SORT_OPTIONS` generically.
+      3. **Folded Search into Browse.** Root cause of the width
+         inconsistency Neil noticed: `#results` had its own padding rule,
+         `#searchResults`/`#newResults` had none at all (0px, flush to the
+         app edge). Rather than patch the CSS, removed the Search tab
+         entirely — the search field now lives permanently in the Browse
+         pane, `applyFiltersToResults()` gained a title-match predicate
+         alongside the existing filter-chip logic (one render path
+         instead of two), and `#results`/`#newResults` now share a
+         `.result-list` class so New This Month's padding is fixed too as
+         part of the same change. `renderSearch()` and `#searchPane`
+         deleted outright.
+      Verified all three in a real browser (local dev server + Browser
+      pane) before committing: search-in-Browse with highlighting intact,
+      combined filter+search empty states, Release Year sort ordering,
+      New This Month's padding now matching Browse, no console errors.

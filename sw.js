@@ -10,10 +10,11 @@
    Caching strategy, by resource:
      app shell (html/js/icons) — cache-first. Never changes between deploys;
                                  a deploy bumps CACHE_VERSION to invalidate.
-     catalog.json              — stale-while-revalidate. Renders instantly from
-                                 cache, then quietly refreshes in the background
-                                 so the twice-monthly catalog update lands
-                                 without the passenger ever seeing a load state.
+     catalog.json,             — stale-while-revalidate. Renders instantly from
+     last-updated.json           cache, then quietly refreshes in the background
+                                 so the twice-monthly catalog update (and the
+                                 "last updated" indicator's data) lands without
+                                 the passenger ever seeing a load state.
      posters (image.tmdb.org)  — cache-first, opportunistically pre-warmed (see
                                  WARM_POSTERS below). Cross-origin, so responses
                                  may be opaque; that's fine for <img>.
@@ -21,7 +22,7 @@
    BUMP CACHE_VERSION on every deploy that changes the shell.
    ============================================================================= */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const SHELL_CACHE   = `seatback-shell-${CACHE_VERSION}`;
 const DATA_CACHE    = `seatback-data-${CACHE_VERSION}`;
 const POSTER_CACHE  = `seatback-posters-${CACHE_VERSION}`;
@@ -40,6 +41,7 @@ const SHELL_ASSETS = [
 ];
 
 const CATALOG_PATH = 'catalog.json';
+const LAST_UPDATED_PATH = 'last-updated.json';
 
 // --- install: precache the shell ---------------------------------------------
 self.addEventListener('install', (event) => {
@@ -52,11 +54,14 @@ self.addEventListener('install', (event) => {
       try { await cache.add(new Request(url, { cache: 'reload' })); }
       catch (e) { console.warn('[sw] shell asset skipped:', url, e.message); }
     }));
-    // Also seed the catalog so a first offline launch has data.
-    try {
-      const dataCache = await caches.open(DATA_CACHE);
-      await dataCache.add(new Request(CATALOG_PATH, { cache: 'reload' }));
-    } catch (e) { console.warn('[sw] catalog precache skipped:', e.message); }
+    // Also seed the catalog (+ its last-updated sidecar) so a first offline
+    // launch has data. Tolerate the sidecar being briefly missing — it's a
+    // display nicety, not something offline launch depends on.
+    const dataCache = await caches.open(DATA_CACHE);
+    try { await dataCache.add(new Request(CATALOG_PATH, { cache: 'reload' })); }
+    catch (e) { console.warn('[sw] catalog precache skipped:', e.message); }
+    try { await dataCache.add(new Request(LAST_UPDATED_PATH, { cache: 'reload' })); }
+    catch (e) { console.warn('[sw] last-updated precache skipped:', e.message); }
     self.skipWaiting();
   })());
 });
@@ -126,14 +131,17 @@ self.addEventListener('fetch', (event) => {
   // Same-origin only from here
   if (url.origin !== self.location.origin) return;
 
-  // Catalog data. Normally stale-while-revalidate (instant from cache, quiet
-  // background refresh) — but the refresh button and the resume-from-
-  // background recheck (see index.html) send X-Seatback-Refresh to explicitly
-  // ask for network-first instead, since stale-while-revalidate would just
-  // hand back the same cached response those callers are trying to bypass.
-  // Time-boxed so a captive-portal Wi-Fi that resolves DNS but blocks traffic
-  // can't leave a manual refresh hanging.
-  if (url.pathname.endsWith('/' + CATALOG_PATH) || url.pathname.endsWith(CATALOG_PATH)) {
+  // Catalog data (+ its last-updated sidecar). Normally stale-while-
+  // revalidate (instant from cache, quiet background refresh) — but the
+  // refresh button and the resume-from-background recheck (see index.html)
+  // send X-Seatback-Refresh to explicitly ask for network-first instead,
+  // since stale-while-revalidate would just hand back the same cached
+  // response those callers are trying to bypass. Time-boxed so a captive-
+  // portal Wi-Fi that resolves DNS but blocks traffic can't leave a manual
+  // refresh hanging.
+  const isDataPath = [CATALOG_PATH, LAST_UPDATED_PATH].some(
+    (p) => url.pathname.endsWith('/' + p) || url.pathname.endsWith(p));
+  if (isDataPath) {
     const forceRefresh = req.headers.get('X-Seatback-Refresh') === '1';
     event.respondWith(forceRefresh
       ? networkFirst(req, DATA_CACHE, 8000)

@@ -13,7 +13,10 @@ name: Sync catalog membership
 # unreviewed -- see sync_catalog.py's docstring for the exact split logic.
 # The same held-back titles also land in pipeline/flagged.json (structured,
 # machine-readable) for the Catalog Ops dashboard's "Needs your review"
-# section to pick up.
+# section to pick up. When titles_with_years.tsv/matched.csv themselves
+# actually change (a real membership change, not just scrape/flag noise),
+# root-level last-updated.json also gets a fresh timestamp -- that's what
+# drives the app's "last updated" indicator.
 #
 # This used to be two stages in two different places: a local script
 # (push_scrape.sh, scheduled via launchd) did the scrape because Letterboxd
@@ -93,6 +96,16 @@ jobs:
             echo "No changes to commit."
             echo "committed=false" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          # last-updated.json drives the app's "last updated" indicator, and
+          # is meant to answer one specific question for a passenger: has
+          # the movie list itself changed, not just scores or scrape noise.
+          # So it only gets touched when titles_with_years.tsv/matched.csv
+          # themselves differ -- not on a run where only raw_scrape.tsv or
+          # flagged.json changed with no real membership change.
+          if ! git diff --cached --quiet -- titles_with_years.tsv pipeline/matched.csv; then
+            echo "{\"titlesUpdatedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > last-updated.json
+            git add last-updated.json
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
