@@ -8,24 +8,27 @@
    error states, nothing that needs the network.
 
    Caching strategy, by resource:
-     app shell (html/js/icons) — cache-first. Never changes between deploys;
-                                 a deploy bumps CACHE_VERSION to invalidate.
-     catalog.json,             — stale-while-revalidate. Renders instantly from
-     last-updated.json           cache, then quietly refreshes in the background
-                                 so the twice-monthly catalog update (and the
-                                 "last updated" indicator's data) lands without
-                                 the passenger ever seeing a load state.
+     app shell (html/js/icons), — stale-while-revalidate. Renders instantly
+     catalog.json,                from cache — critical for the shell itself,
+     last-updated.json            since that's what makes a fully-offline
+                                 launch possible — then quietly refreshes in
+                                 the background so the *next* launch picks up
+                                 whatever changed, with no version string to
+                                 remember to bump: every fetch re-checks the
+                                 network itself, so nothing can go stale
+                                 forever the way a forgotten cache-first
+                                 version bump can.
      posters (image.tmdb.org)  — cache-first, opportunistically pre-warmed (see
                                  WARM_POSTERS below). Cross-origin, so responses
                                  may be opaque; that's fine for <img>.
 
-   BUMP CACHE_VERSION on every deploy that changes the shell.
+   Single stable cache names below (no version suffix) — nothing here is ever
+   bulk-invalidated by a deploy; staleness is handled per-request instead.
    ============================================================================= */
 
-const CACHE_VERSION = 'v3';
-const SHELL_CACHE   = `seatback-shell-${CACHE_VERSION}`;
-const DATA_CACHE    = `seatback-data-${CACHE_VERSION}`;
-const POSTER_CACHE  = `seatback-posters-${CACHE_VERSION}`;
+const SHELL_CACHE   = 'seatback-shell';
+const DATA_CACHE    = 'seatback-data';
+const POSTER_CACHE  = 'seatback-posters';
 
 // Relative paths so this works both at a domain root and under a GitHub Pages
 // project subpath (e.g. /seatback-cinema/).
@@ -66,7 +69,7 @@ self.addEventListener('install', (event) => {
   })());
 });
 
-// --- activate: drop caches from previous versions ----------------------------
+// --- activate: drop any caches left over from an older SW design --------------
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keep = new Set([SHELL_CACHE, DATA_CACHE, POSTER_CACHE]);
@@ -80,7 +83,11 @@ self.addEventListener('activate', (event) => {
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request, { ignoreSearch: true });
-  const network = fetch(request)
+  // 'reload' bypasses the browser's own HTTP cache for this fetch — without
+  // it, an unbusted fetch() can be silently satisfied from HTTP cache instead
+  // of reaching the network, defeating the "revalidate" half of this and
+  // leaving stale content cached indefinitely despite this function's intent.
+  const network = fetch(new Request(request, { cache: 'reload' }))
     .then((res) => { if (res && res.ok) cache.put(request, res.clone()); return res; })
     .catch(() => null);
   // Serve cache immediately when we have it; otherwise wait on the network.
@@ -156,7 +163,11 @@ self.addEventListener('fetch', (event) => {
       const cache = await caches.open(SHELL_CACHE);
       const cached = await cache.match('./index.html') || await cache.match('./');
       if (cached) {
-        fetch(req).then(res => { if (res && res.ok) cache.put('./index.html', res.clone()); }).catch(() => {});
+        // 'reload' bypasses HTTP cache so this actually revalidates against
+        // the network rather than potentially re-caching the same stale
+        // response (see staleWhileRevalidate's comment above).
+        fetch(new Request(req, { cache: 'reload' }))
+          .then(res => { if (res && res.ok) cache.put('./index.html', res.clone()); }).catch(() => {});
         return cached;
       }
       try { return await fetch(req); }
@@ -165,8 +176,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Everything else same-origin (js, icons)
-  event.respondWith(cacheFirst(req, SHELL_CACHE));
+  // Everything else same-origin (js, icons). Stale-while-revalidate so a
+  // changed file (a new commit, a regenerated icon) is picked up on the
+  // *next* fetch — cache-first would keep serving byte-identical old
+  // content forever since nothing here changes the cache's key.
+  event.respondWith(staleWhileRevalidate(req, SHELL_CACHE));
 });
 
 // --- poster pre-warming ------------------------------------------------------

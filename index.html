@@ -780,12 +780,24 @@ function warmPosters(){
 
 if ('serviceWorker' in navigator){
   window.addEventListener('load', () => {
+    const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js')
       .then(() => {
-        // On a first visit the worker isn't controlling the page yet, so the
-        // warm-up above would no-op; run it once control is handed over.
-        if (!navigator.serviceWorker.controller){
+        if (!hadController){
+          // On a first visit the worker isn't controlling the page yet, so
+          // the warm-up above would no-op; run it once control is handed
+          // over. Nothing to reload — this load is already fresh.
           navigator.serviceWorker.addEventListener('controllerchange', warmPosters, { once: true });
+        } else {
+          // A returning visit was already under a worker's control. The
+          // shell itself (index.html, scoring.js, icons) self-updates via
+          // stale-while-revalidate with no SW lifecycle event involved, so
+          // this only fires when sw.js's own logic changed and a new worker
+          // took over — reload once so that takes effect immediately
+          // instead of silently waiting for the next navigation.
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            window.location.reload();
+          }, { once: true });
         }
       })
       .catch(err => console.warn('Service worker registration failed:', err));
