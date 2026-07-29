@@ -250,6 +250,7 @@ function loadNewSet() {
         newThisMonth: newSet.has(tmdbId),
         sources: thin ? null : sourceBlock(mdb, details),
         poster: details.poster_path ? `${TMDB_IMG}${details.poster_path}` : null,
+        synopsis: details.overview || null,
         tmdbId,                                          // traceability (UI ignores extra keys)
       });
 

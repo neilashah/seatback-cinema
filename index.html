@@ -115,6 +115,12 @@
   .row-wrapper{ }
   .row-breakdown{ max-height:0; overflow:hidden; opacity:0; transition:max-height .3s ease, opacity .25s ease; }
   .row-breakdown.open{ max-height:120px; opacity:1; }
+  .row-detail{ max-height:0; overflow:hidden; opacity:0; transition:max-height .35s ease, opacity .3s ease; }
+  .row-detail.open{ max-height:640px; opacity:1; }
+  .detail-inner{ display:flex; gap:14px; padding:4px 6px 18px 6px; }
+  .detail-poster{ width:110px; height:163px; border-radius:9px; background:var(--surface-2); flex-shrink:0; object-fit:cover; display:block; }
+  .detail-poster-empty{ border:1px solid var(--hairline); }
+  .detail-synopsis{ font-size:13px; line-height:1.5; color:var(--text-dim); }
   .bd-strip{ display:flex; gap:16px; padding:2px 6px 16px 60px; }
   .bd-item{ display:flex; flex-direction:column; align-items:center; gap:4px; }
   .bd-mini-ring{ width:26px; height:26px; position:relative; }
@@ -208,6 +214,12 @@
     <div class="sheet-handle"></div>
     <div class="sheet-title">Filters <span class="clear" id="clearFilters">Clear all</span></div>
     <div class="filter-group">
+      <div class="filter-group-label">Time left on your flight</div>
+      <div class="runtime-label" id="runtimeLabel">No limit — show everything</div>
+      <input type="range" id="runtimeSlider" min="20" max="150" step="5" value="150">
+      <div class="runtime-ticks"><span>20m</span><span>150m+</span></div>
+    </div>
+    <div class="filter-group">
       <div class="filter-group-label">Genre</div>
       <div class="chip-row" data-group="genre">
         <div class="chip" data-val="Drama" tabindex="0" role="button">Drama</div>
@@ -233,12 +245,6 @@
         <div class="chip" data-val="Critics' Film" tabindex="0" role="button">Critics' Film</div>
         <div class="chip" data-val="Audience's Film" tabindex="0" role="button">Audience's Film</div>
       </div>
-    </div>
-    <div class="filter-group">
-      <div class="filter-group-label">Time left on your flight</div>
-      <div class="runtime-label" id="runtimeLabel">No limit — show everything</div>
-      <input type="range" id="runtimeSlider" min="20" max="150" step="5" value="150">
-      <div class="runtime-ticks"><span>20m</span><span>150m+</span></div>
     </div>
     <button class="apply-btn" id="applyFilters">Show results</button>
   </div>
@@ -406,6 +412,14 @@ function scoreBadge(m){
   </div>`;
 }
 
+function detailPanel(m){
+  const poster = m.poster
+    ? `<img class="detail-poster" src="${m.poster.replace('/w342/', '/w500/')}" alt="" loading="lazy">`
+    : `<div class="detail-poster detail-poster-empty" aria-hidden="true"></div>`;
+  const synopsis = m.synopsis || 'No synopsis available yet.';
+  return `<div class="row-detail"><div class="detail-inner">${poster}<div class="detail-synopsis">${synopsis}</div></div></div>`;
+}
+
 function renderRow(m, highlightQuery){
   let titleHtml = m.title;
   if (highlightQuery){
@@ -434,6 +448,7 @@ function renderRow(m, highlightQuery){
       ${scoreBadge(m)}
     </div>
     ${breakdownPanel(m)}
+    ${detailPanel(m)}
   </div>`;
 }
 
@@ -505,15 +520,21 @@ ratingOptionsEl.addEventListener('click', (e) => {
 });
 
 // Tap a score badge to expand/collapse its breakdown (5-source mini-ring
-// strip + MI verdict line). Row taps otherwise do nothing — there's no
-// detail view; the row + breakdown is the whole story for this app.
+// strip + MI verdict line). Tap anywhere else on the row to expand/collapse
+// its detail panel (poster + synopsis), independently of the breakdown.
 ['results', 'newResults'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
+    const wrapper = e.target.closest('.row-wrapper');
+    if (!wrapper) return;
     const badge = e.target.closest('.score-badge');
-    if (!badge) return;
-    e.stopPropagation();
-    const panel = badge.closest('.row-wrapper').querySelector('.row-breakdown');
-    panel.classList.toggle('open');
+    if (badge){
+      e.stopPropagation();
+      wrapper.querySelector('.row-breakdown').classList.toggle('open');
+      return;
+    }
+    if (e.target.closest('.row')){
+      wrapper.querySelector('.row-detail').classList.toggle('open');
+    }
   });
 });
 
