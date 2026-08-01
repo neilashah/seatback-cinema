@@ -59,10 +59,11 @@ const getArg = (flag, def) => {
   const i = args.indexOf(flag);
   return i !== -1 && args[i + 1] ? args[i + 1] : def;
 };
-const IN_CSV   = getArg('--in', 'matched.csv');
-const OUT_JSON = getArg('--out', 'catalog.json');
-const LIMIT    = parseInt(getArg('--limit', '0'), 10) || 0;   // 0 = all
-const DELAY_MS = parseInt(getArg('--delay', '350'), 10);      // pause between titles
+const IN_CSV    = getArg('--in', 'matched.csv');
+const OUT_JSON  = getArg('--out', 'catalog.json');
+const CURATION  = getArg('--curation', process.env.CURATION_PATH || '../curation.csv');
+const LIMIT     = parseInt(getArg('--limit', '0'), 10) || 0;   // 0 = all
+const DELAY_MS  = parseInt(getArg('--delay', '350'), 10);      // pause between titles
 
 const TMDB_KEY        = process.env.TMDB_KEY;
 const MDBLIST_KEY     = process.env.MDBLIST_KEY;
@@ -187,6 +188,43 @@ function loadNewSet() {
   return new Set(fs.readFileSync(p, 'utf8').split(/\s+/).map(s => s.trim()).filter(Boolean));
 }
 
+// --- manual curation (adds/removes outside the Letterboxd scrape) -----------
+// Reads curation.csv (normally edited via curator.html — see DEPLOY.md).
+// Missing file -> no-op, so this script keeps working unchanged for anyone
+// who hasn't adopted curation yet.
+function loadCuration() {
+  const p = path.resolve(__dirname, CURATION);
+  const adds = new Map();     // tmdb_id -> { title }
+  const removes = new Set();  // tmdb_id
+  if (!fs.existsSync(p)) return { adds, removes };
+
+  const rows = parseCSV(fs.readFileSync(p, 'utf8')).filter(r => !(r[0] || '').trim().startsWith('#'));
+  if (!rows.length) return { adds, removes };
+
+  const header = rows.shift().map(h => h.trim());
+  const col = name => header.indexOf(name);
+  const iAction = col('action'), iId = col('tmdb_id'), iTitle = col('title');
+  if (iAction === -1 || iId === -1) {
+    console.warn(`WARN: ${CURATION} missing action/tmdb_id columns — ignoring.`);
+    return { adds, removes };
+  }
+
+  for (const r of rows) {
+    const action = (r[iAction] || '').trim().toLowerCase();
+    const id = (r[iId] || '').trim();
+    const title = iTitle !== -1 ? (r[iTitle] || '').trim() : '';
+    if (!/^\d+$/.test(id)) { console.warn(`WARN: ${CURATION} row skipped (bad tmdb_id): ${r.join(',')}`); continue; }
+    if (action === 'add') adds.set(id, { title });
+    else if (action === 'remove') removes.add(id);
+    else console.warn(`WARN: ${CURATION} row skipped (unknown action "${action}"): ${r.join(',')}`);
+  }
+
+  // Conflict rule: remove wins.
+  for (const id of removes) adds.delete(id);
+
+  return { adds, removes };
+}
+
 // --- main --------------------------------------------------------------------
 (async function main() {
   const csvPath = path.resolve(__dirname, IN_CSV);
@@ -204,7 +242,22 @@ function loadNewSet() {
     .filter(x => x.tmdbId && x.tmdbId !== 'miss' && /^\d+$/.test(x.tmdbId));
   if (LIMIT) queue = queue.slice(0, LIMIT);
 
-  console.log(`Scoring ${queue.length} titles (delay ${DELAY_MS}ms)…\n`);
+  // Manual curation: blocklist filters out ids no matter where they came
+  // from; adds inject ids that weren't matched from the scrape at all.
+  // Applied after --limit so a smoke-test run still exercises this path.
+  const { adds, removes } = loadCuration();
+  queue = queue.filter(x => !removes.has(x.tmdbId));
+  const present = new Set(queue.map(x => x.tmdbId));
+  let manualAdded = 0;
+  for (const [id, meta] of adds) {
+    if (!present.has(id)) {
+      queue.push({ tmdbId: id, raw: meta.title || `tmdb:${id}`, conf: 'manual' });
+      manualAdded++;
+    }
+  }
+
+  console.log(`Scoring ${queue.length} titles (delay ${DELAY_MS}ms)…`);
+  console.log(`  manual adds: ${manualAdded} · blocklisted: ${removes.size}\n`);
 
   const catalog = [];
   const stats = { scored: 0, thin: 0, unmeasuredMI: 0, failed: 0, gated: 0, partial: 0 };

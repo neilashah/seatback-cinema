@@ -1,0 +1,785 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seatback Cinema — Curator</title>
+<style>
+  :root{
+    --bg:#0B0B0D; --surface:#17171B; --surface-2:#1F1F24; --surface-3:#26262D;
+    --hairline:#2A2A30; --hairline-soft:#201F26;
+    --text:#F2F1ED; --text-dim:#9291A8; --text-faint:#5A5A60;
+    --accent:#8F68C4; --accent-bright:#B48EEA; --accent-wash:rgba(143,104,196,0.14);
+    --good:#6FBF8B; --good-wash:rgba(111,191,139,0.13);
+    --warn:#E0A952; --warn-wash:rgba(224,169,82,0.14);
+    --miss:#D97D6C; --miss-wash:rgba(217,125,108,0.14);
+    --radius:14px;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  /* Same dark register as catalog-ops.html — this is its write-capable sibling. */
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased; padding-bottom:88px;
+  }
+  a{ color:inherit; }
+  button, input{ font-family:inherit; }
+  ::selection{ background:var(--accent-wash); color:var(--text); }
+
+  .page{ max-width:760px; margin:0 auto; padding:32px 20px 60px; }
+
+  .masthead{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:6px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand svg{ width:28px; height:28px; flex-shrink:0; }
+  .brand-text h1{ margin:0; font-size:18px; font-weight:800; letter-spacing:-0.01em; }
+  .brand-text p{ margin:2px 0 0; font-size:12px; color:var(--text-dim); }
+  .brand-links{ display:flex; gap:12px; font-size:11.5px; color:var(--text-dim); }
+  .brand-links a{ text-decoration:none; border-bottom:1px solid transparent; }
+  .brand-links a:hover{ color:var(--accent-bright); border-color:var(--accent-bright); }
+  .branch-tag{
+    font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--warn);
+    background:var(--warn-wash); border-radius:6px; padding:2px 7px; margin-left:8px;
+  }
+
+  hr.rule{ border:none; border-top:1px solid var(--hairline); margin:24px 0; }
+
+  /* ---------- Status strip ---------- */
+  .strip{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+    background:var(--hairline); border:1px solid var(--hairline); border-radius:var(--radius);
+    overflow:hidden; margin-top:22px;
+  }
+  .stat{ background:var(--surface); padding:14px 12px; min-width:0; }
+  .stat-label{ font-size:9.5px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-faint); margin:0 0 6px; }
+  .stat-value{ font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; color:var(--text); line-height:1.25; }
+  .stat-value small{ display:block; font-family:var(--sans); font-size:10.5px; font-weight:500; color:var(--text-dim); margin-top:3px; }
+  @media (max-width:480px){ .strip{ grid-template-columns:1fr 1fr; } .stat:last-child{ grid-column:1 / -1; } }
+
+  section{ margin-top:32px; }
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:12px; }
+  .section-head h2{ margin:0; font-size:14px; font-weight:700; }
+  .section-head .count-chip{
+    font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text-dim);
+    background:var(--surface); border:1px solid var(--hairline); border-radius:20px; padding:2px 9px;
+  }
+  .section-sub{ margin:-6px 0 14px; font-size:12px; color:var(--text-dim); line-height:1.5; }
+
+  /* ---------- Setup gate ---------- */
+  .setup-card{
+    background:var(--surface); border:1px solid var(--hairline); border-radius:var(--radius);
+    padding:22px; margin-top:24px;
+  }
+  .setup-card h2{ margin:0 0 6px; font-size:16px; }
+  .setup-card p{ margin:0 0 18px; font-size:12.5px; color:var(--text-dim); line-height:1.55; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:11.5px; font-weight:700; color:var(--text-dim); margin-bottom:6px; }
+  .field .hint{ font-size:11.5px; color:var(--text-faint); margin-top:6px; line-height:1.5; }
+  .field .hint a{ color:var(--accent-bright); text-decoration:underline; }
+  input[type=text], input[type=password], input[type=search]{
+    width:100%; background:var(--surface-2); border:1px solid var(--hairline); border-radius:10px;
+    color:var(--text); font-size:14.5px; padding:12px 14px;
+  }
+  input::placeholder{ color:var(--text-faint); }
+  input:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
+
+  button.btn{
+    appearance:none; cursor:pointer; font-size:13px; font-weight:700; border-radius:10px; padding:11px 18px;
+    display:inline-flex; align-items:center; gap:8px; transition:transform .12s ease, background .15s, opacity .15s;
+    min-height:44px;
+  }
+  button.btn:active{ transform:scale(0.97); }
+  button.btn:disabled{ cursor:default; opacity:0.5; }
+  button.btn:focus-visible{ outline:2px solid var(--accent-bright); outline-offset:2px; }
+  .btn-primary{ background:var(--accent); color:#0B0B0D; border:none; }
+  .btn-primary:hover:not(:disabled){ background:var(--accent-bright); }
+  .btn-ghost{ background:transparent; color:var(--text); border:1px solid var(--hairline); padding:9px 14px; font-size:12.5px; min-height:38px; }
+  .btn-ghost:hover:not(:disabled){ border-color:var(--accent); color:var(--accent-bright); }
+  .btn-danger{ color:var(--miss); }
+  .btn-danger:hover:not(:disabled){ border-color:var(--miss); color:var(--miss); }
+  .btn-block{ width:100%; justify-content:center; }
+
+  .error-banner{
+    background:var(--miss-wash); border:1px solid rgba(217,125,108,0.35); border-radius:10px;
+    padding:12px 14px; font-size:12.5px; color:var(--miss); margin:14px 0; line-height:1.5; display:none;
+  }
+  .error-banner.show{ display:block; }
+
+  /* ---------- Search ---------- */
+  .search-results{ margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+  .movie-row{
+    background:var(--surface); border:1px solid var(--hairline); border-radius:12px;
+    padding:10px 12px; display:flex; align-items:center; gap:12px;
+  }
+  .movie-poster{
+    width:38px; height:57px; border-radius:6px; object-fit:cover; background:var(--surface-3); flex-shrink:0;
+  }
+  .movie-meta{ flex:1; min-width:0; }
+  .movie-title{ font-size:13.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .movie-sub{ font-size:11.5px; color:var(--text-dim); margin-top:2px; }
+  .movie-sub .pill{
+    display:inline-block; font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:0.03em;
+    text-transform:uppercase; border-radius:6px; padding:2px 6px; margin-right:6px;
+  }
+  .pill-catalog{ background:var(--good-wash); color:var(--good); }
+  .pill-manual{ background:var(--accent-wash); color:var(--accent-bright); }
+  .pill-removed{ background:var(--miss-wash); color:var(--miss); }
+  .pill-pending{ background:var(--warn-wash); color:var(--warn); }
+  .movie-actions{ flex-shrink:0; display:flex; gap:6px; align-items:center; }
+
+  .filter-box{ margin-bottom:12px; }
+
+  .empty-note{ font-size:12.5px; color:var(--text-faint); padding:14px 0; }
+
+  /* ---------- Sticky pending bar ---------- */
+  .pending-bar{
+    position:fixed; left:0; right:0; bottom:0; z-index:50;
+    background:var(--surface-2); border-top:1px solid var(--hairline);
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    display:none; align-items:center; justify-content:space-between; gap:12px;
+    box-shadow:0 -8px 24px rgba(0,0,0,0.35);
+  }
+  .pending-bar.show{ display:flex; }
+  .pending-summary{
+    font-size:12.5px; color:var(--text); min-width:0; flex:1;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .pending-summary strong{ color:var(--accent-bright); }
+  .pending-actions{ display:flex; gap:8px; flex-shrink:0; }
+  @media (max-width:420px){
+    .pending-bar{ flex-direction:column; align-items:stretch; gap:10px; }
+    .pending-summary{ white-space:normal; text-overflow:clip; }
+    .pending-actions{ justify-content:stretch; }
+    .pending-actions button{ flex:1; }
+  }
+
+  .rebuild-status{ margin-top:12px; font-size:12px; color:var(--text-dim); }
+  .rebuild-status .dot{
+    display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; background:var(--text-faint);
+  }
+  .rebuild-status.queued .dot{ background:var(--warn); }
+  .rebuild-status.running .dot{ background:var(--warn); animation:pulse 1.2s ease-in-out infinite; }
+  .rebuild-status.success .dot{ background:var(--good); }
+  .rebuild-status.failure .dot{ background:var(--miss); }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+  footer{ margin-top:44px; font-size:11px; color:var(--text-faint); line-height:1.7; }
+  footer a{ color:var(--text-dim); text-decoration:underline; text-decoration-color:var(--hairline); }
+  footer a:hover{ color:var(--accent-bright); text-decoration-color:var(--accent-bright); }
+
+  .hidden{ display:none !important; }
+</style>
+
+<div class="page">
+
+  <div class="masthead">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" fill="none" stroke="#F2F1ED" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="12" y="14" width="40" height="36" rx="8"/>
+        <rect x="17" y="19" width="30" height="26" rx="5" opacity="0.35"/>
+        <rect x="30" y="30" width="13" height="10" rx="2.5" fill="#8F68C4" stroke="none"/>
+      </svg>
+      <div class="brand-text">
+        <h1>Curator<span class="branch-tag hidden" id="branchTag"></span></h1>
+        <p>Seatback Cinema — manual add / remove</p>
+      </div>
+    </div>
+    <div class="brand-links">
+      <a href="#" id="rotateKeysLink">Keys</a>
+    </div>
+  </div>
+
+  <div id="errorBanner" class="error-banner"></div>
+
+  <!-- ============ Setup gate ============ -->
+  <div class="setup-card" id="setupCard">
+    <h2>Connect</h2>
+    <p>Both values are stored only in this browser's local storage — never sent anywhere except GitHub's and TMDB's own APIs, directly from this page.</p>
+
+    <div class="field">
+      <label for="patInput">GitHub personal access token</label>
+      <input type="password" id="patInput" placeholder="github_pat_…" autocomplete="off">
+      <p class="hint">Fine-grained token, scoped to just the <code>seatback-cinema</code> repo, with <strong>Contents: Read and write</strong> + <strong>Actions: Read and write</strong> permissions. Create one at <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a> — set an expiry.</p>
+    </div>
+
+    <div class="field">
+      <label for="tmdbInput">TMDB API key (v3 auth)</label>
+      <input type="password" id="tmdbInput" placeholder="…" autocomplete="off">
+      <p class="hint">From <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a> — the "API Key" field, not the Read Access Token.</p>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="connectBtn">Connect</button>
+  </div>
+
+  <!-- ============ Main app ============ -->
+  <div id="app" class="hidden">
+
+    <div class="strip">
+      <div class="stat">
+        <p class="stat-label">Titles live</p>
+        <p class="stat-value" id="statCatalogCount">—</p>
+      </div>
+      <div class="stat">
+        <p class="stat-label">Manual pins</p>
+        <p class="stat-value" id="statAdds">—</p>
+      </div>
+      <div class="stat">
+        <p class="stat-label">Blocklisted</p>
+        <p class="stat-value" id="statRemoves">—</p>
+      </div>
+    </div>
+
+    <div id="rebuildStatus" class="rebuild-status hidden"><span class="dot"></span><span id="rebuildStatusText"></span></div>
+
+    <section>
+      <div class="section-head"><h2>Add a movie</h2></div>
+      <input type="search" id="searchInput" class="filter-box" placeholder="Search TMDB by title…" inputmode="search">
+      <div class="search-results" id="searchResults"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Current catalog</h2>
+        <span class="count-chip" id="catalogCountChip">0</span>
+      </div>
+      <input type="search" id="catalogFilter" class="filter-box" placeholder="Filter catalog…" inputmode="search">
+      <div class="search-results" id="catalogList"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Manual curation</h2>
+        <span class="count-chip" id="curationCountChip">0</span>
+      </div>
+      <p class="section-sub">Pins and blocklist entries in <code>curation.csv</code>, including anything staged below but not yet committed.</p>
+      <div class="search-results" id="curationList"></div>
+      <div class="empty-note hidden" id="curationEmpty">Nothing manually pinned or blocked — the catalog is exactly what the Letterboxd scrape produces.</div>
+    </section>
+
+    <footer>
+      <p>Writes go straight to <code>curation.csv</code> on <code>main</code> via the GitHub API, then dispatch <code>refresh-catalog.yml</code> to rebuild <code>catalog.json</code> — live in a few minutes. This page is publicly reachable but does nothing without your own token.</p>
+      <p><a href="https://github.com/neilashah/seatback-cinema" target="_blank" rel="noopener">Repo</a> · <a href="https://neilashah.github.io/seatback-cinema/" target="_blank" rel="noopener">Live app</a></p>
+    </footer>
+
+  </div>
+
+  <div class="pending-bar" id="pendingBar">
+    <div class="pending-summary" id="pendingSummary"></div>
+    <div class="pending-actions">
+      <button class="btn btn-ghost" id="discardBtn">Discard</button>
+      <button class="btn btn-primary" id="commitBtn">
+        <span class="spinner"></span><span class="btn-label">Commit &amp; rebuild</span>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  const OWNER = 'neilashah';
+  const REPO = 'seatback-cinema';
+  const WORKFLOW = 'refresh-catalog.yml';
+  const CURATION_PATH = 'curation.csv';
+  const CATALOG_PATH = 'catalog.json';
+  const GH_API = 'https://api.github.com';
+  const TMDB_API = 'https://api.themoviedb.org/3';
+  const TMDB_IMG = 'https://image.tmdb.org/t/p/w92';
+
+  const params = new URLSearchParams(location.search);
+  const BRANCH = params.get('branch') || 'main';
+  const TEST_MODE = BRANCH !== 'main';
+
+  const LS_PAT = 'sbc_gh_pat';
+  const LS_TMDB = 'sbc_tmdb_key';
+  const LS_OPS = 'sbc_curator_ops_v1';
+
+  // ---------- tiny DOM helpers ----------
+  const $ = id => document.getElementById(id);
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function showError(msg){
+    const el = $('errorBanner');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+  function clearError(){ $('errorBanner').classList.remove('show'); }
+  function debounce(fn, ms){
+    let t;
+    return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+  }
+  function todayIso(){ return new Date().toISOString().slice(0, 10); }
+
+  // ---------- credentials ----------
+  function getPat(){ return localStorage.getItem(LS_PAT) || ''; }
+  function getTmdbKey(){ return localStorage.getItem(LS_TMDB) || ''; }
+  function hasCreds(){ return !!(getPat() && getTmdbKey()); }
+
+  async function ghFetch(path, opts){
+    opts = opts || {};
+    const headers = Object.assign({
+      'Authorization': 'Bearer ' + getPat(),
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    }, opts.headers || {});
+    const res = await fetch(GH_API + path, Object.assign({}, opts, { headers }));
+    return res;
+  }
+
+  // ---------- CSV (kept in sync with pipeline/build_catalog.js's parser) ----------
+  function parseCSV(text){
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+        else field += c;
+      } else if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows.filter(r => r.length && r.some(v => v !== ''));
+  }
+  function csvField(v){
+    v = String(v == null ? '' : v);
+    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }
+
+  const CURATION_HEADER_COMMENT =
+`# curation.csv — manual catalog membership edits, applied by
+# pipeline/build_catalog.js AFTER matched.csv. Survives the daily sync
+# (sync-catalog.yml commits an explicit file list that never includes this
+# file) and every rebuild. Normally edited via curator.html.
+#
+# Columns:  action , tmdb_id , title , note , added
+#   action  = "add"    -> title appears in the catalog even if not on the
+#                         Letterboxd list, until this row is deleted
+#             "remove" -> title is suppressed from the catalog even if the
+#                         scrape includes it (blocklist)
+#   tmdb_id = TMDB movie id (the dedupe key)
+#   title   = human-readable label only; build_catalog.js fetches the real
+#             title from TMDB
+#   note    = free text (why)
+#   added   = ISO date the row was created
+#
+# Conflict rule: if the same tmdb_id has both an add and a remove row, remove
+# wins. If an "add" title later appears in the scrape, the scraped copy is
+# identical (same tmdb_id) — the add row becomes a harmless no-op pin.`;
+
+  function parseCuration(text){
+    const adds = new Map(), removes = new Map();
+    const rows = parseCSV(text).filter(r => !(r[0] || '').trim().startsWith('#'));
+    if (!rows.length) return { adds, removes };
+    const header = rows.shift().map(h => h.trim());
+    const col = name => header.indexOf(name);
+    const iAction = col('action'), iId = col('tmdb_id'), iTitle = col('title'), iNote = col('note'), iAdded = col('added');
+    if (iAction === -1 || iId === -1) return { adds, removes };
+    for (const r of rows) {
+      const action = (r[iAction] || '').trim().toLowerCase();
+      const id = (r[iId] || '').trim();
+      if (!/^\d+$/.test(id)) continue;
+      const entry = {
+        title: iTitle !== -1 ? (r[iTitle] || '').trim() : '',
+        note: iNote !== -1 ? (r[iNote] || '').trim() : '',
+        added: iAdded !== -1 ? (r[iAdded] || '').trim() : '',
+      };
+      if (action === 'add') adds.set(id, entry);
+      else if (action === 'remove') removes.set(id, entry);
+    }
+    return { adds, removes };
+  }
+
+  function serializeCuration(adds, removes){
+    const lines = [CURATION_HEADER_COMMENT, 'action,tmdb_id,title,note,added'];
+    const addRows = Array.from(adds.entries()).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+    const removeRows = Array.from(removes.entries()).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+    for (const [id, e] of addRows) lines.push(['add', id, e.title, e.note, e.added].map(csvField).join(','));
+    for (const [id, e] of removeRows) lines.push(['remove', id, e.title, e.note, e.added].map(csvField).join(','));
+    return lines.join('\n') + '\n';
+  }
+
+  // ---------- base64 (UTF-8 safe) ----------
+  function b64Encode(str){ return btoa(unescape(encodeURIComponent(str))); }
+  function b64Decode(b64){ return decodeURIComponent(escape(atob(b64.replace(/\n/g, '')))); }
+
+  // ---------- state ----------
+  let catalog = [];              // parsed catalog.json
+  let catalogIds = new Set();    // tmdbId strings present in catalog.json
+  let baseAdds = new Map(), baseRemoves = new Map();   // from the last fetched curation.csv
+  let curationSha = null;        // null = file doesn't exist yet
+  let ops = loadOps();           // [{type:'add'|'remove'|'undo', id, title, added}]
+
+  function loadOps(){
+    try { return JSON.parse(localStorage.getItem(LS_OPS) || '[]'); }
+    catch (e) { return []; }
+  }
+  function saveOps(){ localStorage.setItem(LS_OPS, JSON.stringify(ops)); }
+
+  function applyOps(adds, removes, opsList){
+    const a = new Map(adds), r = new Map(removes);
+    for (const op of opsList) {
+      if (op.type === 'add') { r.delete(op.id); a.set(op.id, { title: op.title, note: 'via curator', added: op.added }); }
+      else if (op.type === 'remove') { a.delete(op.id); r.set(op.id, { title: op.title, note: 'via curator', added: op.added }); }
+      else if (op.type === 'undo') { a.delete(op.id); r.delete(op.id); }
+    }
+    return { adds: a, removes: r };
+  }
+  function working(){ return applyOps(baseAdds, baseRemoves, ops); }
+  function isPending(id){ return ops.some(o => o.id === id); }
+
+  function pushOp(type, id, title){
+    ops = ops.filter(o => o.id !== id);   // one live op per id — latest tap wins
+    ops.push({ type, id, title: title || '', added: todayIso() });
+    saveOps();
+    renderAll();
+  }
+  function clearOpsFor(id){
+    ops = ops.filter(o => o.id !== id);
+    saveOps();
+    renderAll();
+  }
+  function discardAllOps(){
+    ops = [];
+    saveOps();
+    renderAll();
+  }
+
+  function statusFor(id){
+    const w = working();
+    if (w.removes.has(id)) return 'removed';
+    if (w.adds.has(id)) return 'manual';
+    if (catalogIds.has(id)) return 'catalog';
+    return 'none';
+  }
+
+  // ---------- rendering ----------
+  function renderStrip(){
+    $('statCatalogCount').textContent = catalog.length;
+    const w = working();
+    $('statAdds').textContent = w.adds.size;
+    $('statRemoves').textContent = w.removes.size;
+  }
+
+  function renderPendingBar(){
+    const bar = $('pendingBar');
+    if (!ops.length) { bar.classList.remove('show'); return; }
+    bar.classList.add('show');
+    const names = ops.slice(0, 4).map(o => {
+      const sign = o.type === 'add' ? '+' : (o.type === 'remove' ? '−' : '↺');
+      return sign + (o.title || o.id);
+    });
+    let text = names.join(', ');
+    if (ops.length > 4) text += `, +${ops.length - 4} more`;
+    $('pendingSummary').innerHTML = `<strong>${ops.length}</strong> pending change${ops.length === 1 ? '' : 's'} — ${escapeHtml(text)}`;
+  }
+
+  function pillsFor(id){
+    const st = statusFor(id);
+    const pending = isPending(id);
+    let html = '';
+    if (st === 'catalog') html += '<span class="pill pill-catalog">in catalog</span>';
+    if (st === 'manual') html += '<span class="pill pill-manual">manual pin</span>';
+    if (st === 'removed') html += '<span class="pill pill-removed">blocklisted</span>';
+    if (pending) html += '<span class="pill pill-pending">pending</span>';
+    return html;
+  }
+
+  function actionsFor(id, title){
+    const st = statusFor(id);
+    const pending = isPending(id);
+    const btns = [];
+    if (pending) {
+      btns.push(`<button class="btn btn-ghost" data-undo="${id}">Revert</button>`);
+    } else if (st === 'catalog' || st === 'manual') {
+      btns.push(`<button class="btn btn-ghost btn-danger" data-remove="${id}" data-title="${escapeHtml(title)}">Remove</button>`);
+    } else if (st === 'removed') {
+      btns.push(`<button class="btn btn-ghost" data-unblock="${id}">Unblock</button>`);
+    } else {
+      btns.push(`<button class="btn btn-ghost" data-add="${id}" data-title="${escapeHtml(title)}">Add</button>`);
+    }
+    return btns.join('');
+  }
+
+  function movieRow({ id, title, year, poster, extraSub }){
+    const sub = [extraSub, year || ''].filter(Boolean).join(' · ');
+    return `
+      <div class="movie-row" data-row="${id}">
+        <img class="movie-poster" src="${poster || ''}" onerror="this.style.visibility='hidden'" alt="">
+        <div class="movie-meta">
+          <div class="movie-title">${escapeHtml(title)}</div>
+          <div class="movie-sub">${pillsFor(id)}${escapeHtml(sub)}</div>
+        </div>
+        <div class="movie-actions">${actionsFor(id, title)}</div>
+      </div>`;
+  }
+
+  function renderCatalogList(){
+    const filter = ($('catalogFilter').value || '').toLowerCase();
+    const rows = catalog
+      .filter(m => !filter || m.title.toLowerCase().includes(filter))
+      .sort((a, b) => a.title.localeCompare(b.title));
+    $('catalogCountChip').textContent = catalog.length;
+    $('catalogList').innerHTML = rows.map(m => movieRow({
+      id: String(m.tmdbId), title: m.title, year: m.year,
+      poster: m.poster, extraSub: m.is != null ? `IS ${m.is}` : null,
+    })).join('') || '<div class="empty-note">No matches.</div>';
+  }
+
+  function renderCurationList(){
+    const w = working();
+    const entries = [
+      ...Array.from(w.adds.entries()).map(([id, e]) => ({ id, title: e.title || `tmdb:${id}`, kind: 'add' })),
+      ...Array.from(w.removes.entries()).map(([id, e]) => ({ id, title: e.title || `tmdb:${id}`, kind: 'remove' })),
+    ].sort((a, b) => a.title.localeCompare(b.title));
+    $('curationCountChip').textContent = entries.length;
+    $('curationEmpty').classList.toggle('hidden', entries.length > 0);
+    $('curationList').innerHTML = entries.map(e => movieRow({
+      id: e.id, title: e.title, year: null,
+      poster: null, extraSub: e.kind === 'add' ? 'manual pin' : 'blocklisted',
+    })).join('');
+  }
+
+  function renderAll(){
+    renderStrip();
+    renderPendingBar();
+    renderCatalogList();
+    renderCurationList();
+  }
+
+  // Event delegation — one listener per action type, works for rows re-rendered at any time.
+  document.body.addEventListener('click', (evt) => {
+    const t = evt.target.closest('button');
+    if (!t) return;
+    if (t.dataset.add) pushOp('add', t.dataset.add, t.dataset.title);
+    else if (t.dataset.remove) pushOp('remove', t.dataset.remove, t.dataset.title);
+    else if (t.dataset.unblock) pushOp('undo', t.dataset.unblock);
+    else if (t.dataset.undo) clearOpsFor(t.dataset.undo);
+  });
+
+  // ---------- TMDB search ----------
+  async function tmdbSearch(query){
+    const key = getTmdbKey();
+    const res = await fetch(`${TMDB_API}/search/movie?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(query)}&include_adult=false`);
+    if (!res.ok) throw new Error('TMDB search failed (' + res.status + ')');
+    const data = await res.json();
+    return data.results || [];
+  }
+
+  const runSearch = debounce(async () => {
+    const q = $('searchInput').value.trim();
+    const resultsEl = $('searchResults');
+    if (!q) { resultsEl.innerHTML = ''; return; }
+    try {
+      const results = await tmdbSearch(q);
+      resultsEl.innerHTML = results.slice(0, 12).map(r => movieRow({
+        id: String(r.id), title: r.title,
+        year: r.release_date ? r.release_date.slice(0, 4) : null,
+        poster: r.poster_path ? TMDB_IMG + r.poster_path : null,
+        extraSub: null,
+      })).join('') || '<div class="empty-note">No results.</div>';
+    } catch (e) {
+      showError('TMDB search error: ' + e.message);
+    }
+  }, 400);
+  $('searchInput').addEventListener('input', runSearch);
+  $('catalogFilter').addEventListener('input', renderCatalogList);
+
+  // ---------- load ----------
+  async function loadCatalogJson(){
+    const res = await fetch(CATALOG_PATH, { cache: 'no-cache', headers: { 'X-Seatback-Refresh': '1' } });
+    if (!res.ok) throw new Error('failed to fetch catalog.json');
+    catalog = await res.json();
+    catalogIds = new Set(catalog.map(m => String(m.tmdbId)));
+  }
+
+  async function loadCuration(){
+    const res = await ghFetch(`/repos/${OWNER}/${REPO}/contents/${CURATION_PATH}?ref=${encodeURIComponent(BRANCH)}`);
+    if (res.status === 404) { baseAdds = new Map(); baseRemoves = new Map(); curationSha = null; return; }
+    if (!res.ok) throw new Error(`GitHub read failed (${res.status})`);
+    const data = await res.json();
+    curationSha = data.sha;
+    const text = b64Decode(data.content);
+    const parsed = parseCuration(text);
+    baseAdds = parsed.adds;
+    baseRemoves = parsed.removes;
+  }
+
+  async function refreshAll(){
+    clearError();
+    // Settled, not all — catalog.json is same-origin and needs no token, so a
+    // bad/expired GitHub PAT shouldn't blank out the whole page when the
+    // catalog itself loaded fine.
+    const [catalogResult, curationResult] = await Promise.allSettled([loadCatalogJson(), loadCuration()]);
+    if (catalogResult.status === 'rejected') {
+      showError('Failed to load catalog.json: ' + catalogResult.reason.message);
+    } else if (curationResult.status === 'rejected') {
+      const msg = curationResult.reason.message || '';
+      showError(msg.includes('401')
+        ? 'GitHub token rejected — fix it via "Keys" above, then reload.'
+        : 'Failed to load curation.csv: ' + msg);
+    }
+    renderAll();
+  }
+
+  // ---------- commit + dispatch ----------
+  async function commitCuration(){
+    // Re-fetch the latest base right before writing, then replay our
+    // declarative ops on top — safe even if something else touched the file
+    // in the meantime (e.g. a same-day sync-triggered rebuild edited nothing
+    // here, but this keeps the sha fresh regardless).
+    await loadCuration();
+    const final = applyOps(baseAdds, baseRemoves, ops);
+    const content = serializeCuration(final.adds, final.removes);
+
+    const changedTitles = ops.slice(0, 5).map(o => (o.type === 'remove' ? '-' : '+') + (o.title || o.id));
+    let msg = 'Curate: ' + changedTitles.join(', ');
+    if (ops.length > 5) msg += `, +${ops.length - 5} more`;
+    msg += ' (via curator)';
+
+    const body = { message: msg, content: b64Encode(content), branch: BRANCH };
+    if (curationSha) body.sha = curationSha;
+
+    let res = await ghFetch(`/repos/${OWNER}/${REPO}/contents/${CURATION_PATH}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+
+    if (res.status === 409 || res.status === 422) {
+      // sha conflict — refetch once and retry.
+      await loadCuration();
+      const retryFinal = applyOps(baseAdds, baseRemoves, ops);
+      const retryBody = { message: msg, content: b64Encode(serializeCuration(retryFinal.adds, retryFinal.removes)), branch: BRANCH };
+      if (curationSha) retryBody.sha = curationSha;
+      res = await ghFetch(`/repos/${OWNER}/${REPO}/contents/${CURATION_PATH}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(retryBody),
+      });
+    }
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(`commit failed (${res.status}) ${detail.slice(0, 200)}`);
+    }
+
+    ops = [];
+    saveOps();
+    await loadCuration();
+  }
+
+  async function dispatchRebuild(){
+    if (TEST_MODE) return null;   // never touch main's build from a test branch
+    const dispatchedAt = new Date();
+    const res = await ghFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ref: 'main' }),
+    });
+    if (!res.ok) throw new Error(`dispatch failed (${res.status})`);
+    return dispatchedAt;
+  }
+
+  async function pollRebuild(dispatchedAt){
+    const statusEl = $('rebuildStatus'), textEl = $('rebuildStatusText');
+    statusEl.classList.remove('hidden');
+    statusEl.className = 'rebuild-status queued';
+    textEl.textContent = 'Rebuild dispatched — waiting for it to start…';
+
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        const res = await ghFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/runs?event=workflow_dispatch&per_page=5`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const run = (data.workflow_runs || []).find(r => new Date(r.created_at) >= new Date(dispatchedAt.getTime() - 5000));
+        if (!run) continue;
+        if (run.status === 'completed') {
+          statusEl.className = 'rebuild-status ' + (run.conclusion === 'success' ? 'success' : 'failure');
+          textEl.innerHTML = `Rebuild ${escapeHtml(run.conclusion)} — <a href="${run.html_url}" target="_blank" rel="noopener">view run</a>. Pages redeploys automatically after a successful commit.`;
+          await refreshAll();
+          return;
+        }
+        statusEl.className = 'rebuild-status running';
+        textEl.innerHTML = `Rebuild ${escapeHtml(run.status)}… <a href="${run.html_url}" target="_blank" rel="noopener">view run</a>`;
+      } catch (e) { /* keep polling */ }
+    }
+    textEl.textContent = 'Still running — check the Actions tab for status.';
+  }
+
+  $('commitBtn').addEventListener('click', async () => {
+    const btn = $('commitBtn');
+    btn.disabled = true;
+    clearError();
+    try {
+      await commitCuration();
+      renderAll();
+      const dispatchedAt = await dispatchRebuild();
+      if (dispatchedAt) pollRebuild(dispatchedAt);
+      else { $('rebuildStatus').classList.remove('hidden'); $('rebuildStatus').className = 'rebuild-status'; $('rebuildStatusText').textContent = 'Test branch — commit made, rebuild dispatch skipped.'; }
+    } catch (e) {
+      showError('Commit failed: ' + e.message + ' — your changes are still staged, safe to retry.');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('discardBtn').addEventListener('click', () => {
+    if (ops.length && !confirm(`Discard ${ops.length} pending change(s)?`)) return;
+    discardAllOps();
+  });
+
+  // ---------- credentials UI ----------
+  function showApp(){
+    $('setupCard').classList.add('hidden');
+    $('app').classList.remove('hidden');
+  }
+  function showSetup(){
+    $('setupCard').classList.remove('hidden');
+    $('app').classList.add('hidden');
+  }
+
+  async function validateAndConnect(){
+    const pat = $('patInput').value.trim();
+    const tmdb = $('tmdbInput').value.trim();
+    if (!pat || !tmdb) { showError('Both fields are required.'); return; }
+    const btn = $('connectBtn');
+    btn.disabled = true;
+    clearError();
+    try {
+      const [ghRes, tmdbRes] = await Promise.all([
+        fetch(`${GH_API}/repos/${OWNER}/${REPO}`, { headers: { 'Authorization': 'Bearer ' + pat, 'Accept': 'application/vnd.github+json' } }),
+        fetch(`${TMDB_API}/configuration?api_key=${encodeURIComponent(tmdb)}`),
+      ]);
+      if (!ghRes.ok) throw new Error(ghRes.status === 401 ? 'GitHub token rejected — check it was copied in full.' : `GitHub check failed (${ghRes.status})`);
+      if (!tmdbRes.ok) throw new Error('TMDB key rejected — double check the API Key (v3 auth) value.');
+      localStorage.setItem(LS_PAT, pat);
+      localStorage.setItem(LS_TMDB, tmdb);
+      showApp();
+      await refreshAll();
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  $('connectBtn').addEventListener('click', validateAndConnect);
+
+  $('rotateKeysLink').addEventListener('click', (evt) => {
+    evt.preventDefault();
+    if (!confirm('Clear the stored GitHub token and TMDB key from this browser?')) return;
+    localStorage.removeItem(LS_PAT);
+    localStorage.removeItem(LS_TMDB);
+    showSetup();
+  });
+
+  // ---------- boot ----------
+  if (TEST_MODE) {
+    const tag = $('branchTag');
+    tag.textContent = 'branch: ' + BRANCH;
+    tag.classList.remove('hidden');
+  }
+  if (hasCreds()) { showApp(); refreshAll(); }
+  else { showSetup(); }
+})();
+</script>

@@ -11,9 +11,13 @@ laptop.
 
 ```
 /
-  index.html                  <- SeatbackCinema.html, RENAMED
+  index.html                  <- the app (passenger-facing)
+  curator.html                <- manual add/remove admin page (§8) — private, unlinked
+  catalog-ops.html            <- read-only sync/review dashboard
   scoring.js                  <- shared engine (same file Impure Cinema uses)
   catalog.json                <- generated; committed
+  curation.csv                <- manual pins/blocklist (§8); survives every rebuild
+  overrides.csv               <- TMDB match corrections for scraped titles
   sw.js
   manifest.webmanifest
   icon-192.png
@@ -30,11 +34,11 @@ laptop.
 
   .github/workflows/
     refresh-catalog.yml
+    sync-catalog.yml
 ```
 
-**The rename to `index.html` is required.** `sw.js` precaches `./index.html`
-for offline navigation; leave the file named `SeatbackCinema.html` and offline
-launches will fail.
+`sw.js` precaches `./index.html` for offline navigation, so the app shell
+must be named `index.html` at the repo root — this is already the case.
 
 `scoring.js` stays at the repo root and is used by *both* the browser app and
 the pipeline (the workflow passes `SCORING_PATH=../scoring.js`). One engine,
@@ -84,17 +88,15 @@ never show them back to you, so keep your own copy.
 Eastern**, and can be triggered by hand from the **Actions** tab
 (`workflow_dispatch`) any time.
 
-What it does: rebuilds `catalog.json` from the committed `matched.csv`,
-validates it, commits, and Pages redeploys.
-
-**What it deliberately does not do: change which films are in the catalog.**
-That's `sync-catalog.yml`'s job (§5 below) — this workflow only refreshes
-scores for titles already in `matched.csv`.
+What it does: rebuilds `catalog.json` from the committed `matched.csv`
+**merged with `curation.csv`** (manual pins/blocklist — see §8), validates
+the result, commits, and Pages redeploys.
 
 - **Scores** — automated, twice on the 1st of each month.
 - **Membership** — automated for anything that matches TMDB cleanly (see
   §5); a human is only needed for titles the matcher itself flags as
-  ambiguous.
+  ambiguous, or for one-off adds/removes made by hand via `curator.html`
+  (§8).
 
 ### Stale-fallback
 
@@ -216,9 +218,52 @@ Web Unlocker) — not a return to local scraping.
 
 ---
 
-## 6. Deploy checklist
+## 8. Manual curation (`curator.html`)
 
-- [ ] `SeatbackCinema.html` renamed to `index.html`
+For a one-off add or remove that shouldn't wait on the Letterboxd scrape —
+you spot something on a subreddit, a Letterboxd list we don't track, or
+mid-flight on the actual seatback screen — `curator.html` is a private admin
+page, unlinked from the app and `manifest.webmanifest`, but publicly
+reachable at its URL (it's inert without your own credentials, so that's
+fine).
+
+**What it does:** searches TMDB by title, and lets you stage adds/removes
+against `curation.csv` (root — see the file's own header comment for the
+exact schema). "Commit & rebuild" writes `curation.csv` via the GitHub
+Contents API in one commit, then dispatches `refresh-catalog.yml` so the
+change is live in a few minutes — `build_catalog.js` merges `matched.csv`
+with `curation.csv` (adds injected, blocklisted ids filtered, remove wins on
+conflict) before scoring. `curation.csv` isn't touched by `sync-catalog.yml`,
+so a manual entry survives the daily scrape indefinitely, until you undo it
+from the same page.
+
+**One-time setup, in the page itself:**
+
+1. Create a **fine-grained personal access token** at
+   [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new),
+   scoped to just this repo, with **Contents: Read and write** and
+   **Actions: Read and write** permissions. Set an expiry.
+2. Grab your **TMDB API key** (the "API Key" field, not the Read Access
+   Token) from [themoviedb.org/settings/api](https://www.themoviedb.org/settings/api).
+3. Paste both into the page's setup gate. They're stored only in that
+   browser's `localStorage` — never sent anywhere but GitHub's and TMDB's
+   own APIs, directly from the page.
+
+**Mass removals:** blocklisting more than ~20% of the catalog in one commit
+trips `refresh-catalog.yml`'s shrink guard (§4) and the rebuild is refused —
+by design, to stop a mistake from gutting the live catalog. Batch large
+removals across a couple of commits, or bypass the guard by hand for a
+deliberate one-time cleanup.
+
+**Testing changes safely:** open `curator.html?branch=<some-test-branch>`
+(after creating that branch on GitHub) to point every write at the test
+branch instead of `main` — commits land there, and the rebuild dispatch is
+automatically skipped, so nothing touches the live site.
+
+---
+
+## 9. Deploy checklist
+
 - [ ] `scoring.js` at root is the **agreement-gate version**
 - [ ] `catalog.json` generated with that same `scoring.js` and committed
 - [ ] `pipeline/matched.csv` committed
@@ -230,13 +275,13 @@ Web Unlocker) — not a return to local scraping.
 
 ---
 
-## 7. Two things to remember later
-
-**Bump `CACHE_VERSION` in `sw.js`** on any deploy that changes `index.html`,
-`scoring.js`, or the icons. Otherwise returning visitors keep serving the old
-cached shell. `catalog.json` is exempt — it uses stale-while-revalidate, so
-refreshes land on their own.
+## 10. One thing to remember later
 
 **`scoring.js` is shared with Impure Cinema.** A scoring change must be pushed
 to *both* deployments, or the two apps will report different verdicts for the
 same film. The agreement gate is exactly such a change.
+
+(`sw.js` has no `CACHE_VERSION` to bump — every cache name is stable and every
+request self-revalidates against the network, so a changed `index.html`,
+`scoring.js`, or icon reaches returning visitors on their next fetch without
+any manual step.)

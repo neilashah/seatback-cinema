@@ -1,0 +1,20 @@
+# curation.csv — manual catalog membership edits, applied by
+# pipeline/build_catalog.js AFTER matched.csv. Survives the daily sync
+# (sync-catalog.yml commits an explicit file list that never includes this
+# file) and every rebuild. Normally edited via curator.html.
+#
+# Columns:  action , tmdb_id , title , note , added
+#   action  = "add"    -> title appears in the catalog even if not on the
+#                         Letterboxd list, until this row is deleted
+#             "remove" -> title is suppressed from the catalog even if the
+#                         scrape includes it (blocklist)
+#   tmdb_id = TMDB movie id (the dedupe key)
+#   title   = human-readable label only; build_catalog.js fetches the real
+#             title from TMDB
+#   note    = free text (why)
+#   added   = ISO date the row was created
+#
+# Conflict rule: if the same tmdb_id has both an add and a remove row, remove
+# wins. If an "add" title later appears in the scrape, the scraped copy is
+# identical (same tmdb_id) — the add row becomes a harmless no-op pin.
+action,tmdb_id,title,note,added

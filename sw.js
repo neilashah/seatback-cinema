@@ -157,8 +157,12 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Navigations: serve the cached shell so an offline launch works, falling
-  // back to the network (and then to the cached index) if needed.
-  if (req.mode === 'navigate') {
+  // back to the network (and then to the cached index) if needed. Scoped to
+  // actual app-shell URLs only — otherwise every same-origin navigation
+  // (e.g. curator.html, catalog-ops.html) would get hijacked into rendering
+  // the passenger app instead of the page that was actually requested.
+  const isShellNav = url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
+  if (req.mode === 'navigate' && isShellNav) {
     event.respondWith((async () => {
       const cache = await caches.open(SHELL_CACHE);
       const cached = await cache.match('./index.html') || await cache.match('./');
