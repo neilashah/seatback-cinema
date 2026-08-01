@@ -18,9 +18,40 @@
 # wins. If an "add" title later appears in the scrape, the scraped copy is
 # identical (same tmdb_id) — the add row becomes a harmless no-op pin.
 action,tmdb_id,title,note,added
+add,76,Before Sunrise,via curator,2026-08-01
+add,9726,A Good Year,via curator,2026-08-01
+add,10934,Under the Tuscan Sun,via curator,2026-08-01
+add,11130,The Princess Diaries 2: Royal Engagement,via curator,2026-08-01
+add,23049,My Life in Ruins,via curator,2026-08-01
+add,59860,Monte Carlo,via curator,2026-08-01
+add,315635,Spider-Man: Homecoming,via curator,2026-08-01
+add,429617,Spider-Man: Far From Home,via curator,2026-08-01
+add,502356,The Super Mario Bros. Movie,via curator,2026-08-01
+add,508943,Luca,via curator,2026-08-01
+add,634649,Spider-Man: No Way Home,via curator,2026-08-01
+add,893723,PAW Patrol: The Mighty Movie,via curator,2026-08-01
+add,982271,Book Club: The Next Chapter,via curator,2026-08-01
 add,1171145,Crime 101,via curator,2026-08-01
+add,1226863,The Super Mario Galaxy Movie,via curator,2026-08-01
 add,1279493,The Get Out,via curator,2026-08-01
 add,1292695,They Will Kill You,via curator,2026-08-01
 add,1314481,The Devil Wears Prada 2,via curator,2026-08-01
+add,1317149,I Swear,via curator,2026-08-01
 add,1390300,Over Your Dead Body,via curator,2026-08-01
 add,1515899,Billie Eilish - Hit Me Hard and Soft: The Tour (Live in 3D),via curator,2026-08-01
+remove,155,The Dark Knight,via curator,2026-08-01
+remove,455,Bend It Like Beckham,via curator,2026-08-01
+remove,630,The Wizard of Oz,via curator,2026-08-01
+remove,10882,Sleeping Beauty,via curator,2026-08-01
+remove,11970,Hercules,via curator,2026-08-01
+remove,15789,A Goofy Movie,via curator,2026-08-01
+remove,449176,"Love, Simon",via curator,2026-08-01
+remove,940721,Godzilla Minus One,via curator,2026-08-01
+remove,1026371,Everybody Dance,via curator,2026-08-01
+remove,1143973,My Tennis Maestro,via curator,2026-08-01
+remove,1235304,Colours of Time,via curator,2026-08-01
+remove,1294698,Case 137,via curator,2026-08-01
+remove,1328862,1st Kiss,via curator,2026-08-01
+remove,1432605,My Father's Shadow,via curator,2026-08-01
+remove,1456349,It Was Just an Accident,via curator,2026-08-01
+remove,1465563,A Poet,via curator,2026-08-01
