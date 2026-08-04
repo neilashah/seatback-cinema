@@ -28,11 +28,20 @@ name: Sync catalog membership
 
 on:
   schedule:
-    # Daily, ~9am Eastern. Actions cron is always UTC and ignores DST, so
-    # this is pinned to EDT (UTC-4): 13:00 UTC. During EST (roughly early
+    # Mon/Wed/Fri, ~9am Eastern. Actions cron is always UTC and ignores DST,
+    # so this is pinned to EDT (UTC-4): 13:00 UTC. During EST (roughly early
     # Nov - mid March) that lands at 8am Eastern instead -- shift to
-    # '0 14 * * *' for that stretch if exact local time matters.
-    - cron: '0 13 * * *'
+    # '0 14 * * 1,3,5' for that stretch if exact local time matters.
+    #
+    # This used to run daily. It doesn't because the scrape costs real
+    # money: each page is a ScraperAPI JS-render request billed at 10
+    # credits against a 1,000-credit/month free tier, so daily runs came to
+    # ~91% of the allowance (see lb_detail_scrape.py's CREDIT COST section).
+    # Three runs a week is ~260 credits/month with room for manual
+    # dispatches, and the list itself changes far more slowly than daily --
+    # membership went unchanged for the nine straight syncs before this
+    # change landed. Use workflow_dispatch when you know Em just updated it.
+    - cron: '0 13 * * 1,3,5'
   workflow_dispatch:
 
 permissions:
@@ -100,10 +109,12 @@ jobs:
           # last-updated.json drives the app's "last updated" indicator, and
           # is meant to answer one specific question for a passenger: has
           # the movie list itself changed, not just scores or scrape noise.
-          # So it only gets touched when titles_with_years.tsv/matched.csv
-          # themselves differ -- not on a run where only raw_scrape.tsv or
-          # flagged.json changed with no real membership change.
-          if ! git diff --cached --quiet -- titles_with_years.tsv pipeline/matched.csv; then
+          # A plain `git diff` of matched.csv can't answer that -- its
+          # `popularity` column comes from TMDB and is rewritten daily, so
+          # that check fired on every single run. membership_changed.py
+          # compares only the columns that decide what ships (see its
+          # docstring); exit 0 means a real change, 1 means noise only.
+          if python3 pipeline/membership_changed.py; then
             echo "{\"titlesUpdatedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > last-updated.json
             git add last-updated.json
           fi

@@ -134,8 +134,8 @@ from the Actions tab resets that clock.
 
 Adding/removing titles used to be a fully manual step (re-run the scrape,
 re-run the TMDB matcher, eyeball the output, commit). It's now fully
-automated, running daily (~9am Eastern, `workflow_dispatch` also available
-for an on-demand run) entirely in GitHub Actions:
+automated, running Mon/Wed/Fri (~9am Eastern, `workflow_dispatch` also
+available for an on-demand run) entirely in GitHub Actions:
 
 1. **Scrapes the Letterboxd list** (`lb_detail_scrape.py`) via
    [ScraperAPI](https://scraperapi.com) — see §5a for why a plain request
@@ -155,6 +155,23 @@ for an on-demand run) entirely in GitHub Actions:
    future sync until an `overrides.csv` entry resolves them — add a line
    there (see the file's own header for the format) and the next sync
    picks it up cleanly.
+
+**Why Mon/Wed/Fri and not daily:** the scrape isn't free — see §5b. The
+list itself also moves much more slowly than daily; if you know Em just
+updated it, fire a `workflow_dispatch` rather than waiting.
+
+**On `last-updated.json`:** the app's "last updated" indicator is meant to
+tell a passenger that the *film list* changed, not that a score moved. The
+workflow only touches it when `pipeline/membership_changed.py` says the
+membership actually differs. That script exists because the obvious check —
+`git diff` on `matched.csv` — is wrong: that file carries TMDB's
+`popularity` column, which TMDB re-scores daily, so it changed on nearly
+every run (the 2026-08-04 sync rewrote 179 of 189 rows with nothing but
+popularity drift) and the indicator claimed a fresh list every day while
+membership had been static since 2026-07-26. The script compares only the
+columns that decide what ships (`tmdb_id`, `raw_title`, `confidence` — what
+`build_catalog.js` actually reads); if you add a column that affects
+catalog contents, add it to `SIGNIFICANT` there too.
 
 The old fully-manual path (`python3 lb_detail_scrape.py > titles_with_years.tsv`
 then `python3 delta_ic_match.py titles_with_years.tsv > pipeline/matched.csv`)
@@ -203,10 +220,10 @@ raw-HTML approach ever had — `data-item-name` carries "Title (Year)" and
 alt-text/attribute/anchor fallback chain with one regex.
 
 **Setup:** sign up at [scraperapi.com](https://scraperapi.com) (free tier:
-1,000 credits/month, recurring — this project's volume, ~3 requests/day,
-fits comfortably inside it) and set the API key as the `SCRAPERAPI_KEY`
-secret (`gh secret set SCRAPERAPI_KEY`, or via the repo's Settings →
-Secrets page). For a local/manual run, `export SCRAPERAPI_KEY=...` first.
+1,000 credits/month, recurring — see §5b for what that actually buys) and
+set the API key as the `SCRAPERAPI_KEY` secret (`gh secret set
+SCRAPERAPI_KEY`, or via the repo's Settings → Secrets page). For a
+local/manual run, `export SCRAPERAPI_KEY=...` first.
 
 Not guaranteed to be 100% reliable forever, but categorically different
 from the local-browser approach: the bypass work happens on ScraperAPI's
@@ -215,6 +232,40 @@ laptop happen to be awake" variable anymore, and no local Chrome/nodriver
 dependency. If this ever becomes unreliable, the fallback is a
 higher-tier ScraperAPI plan or a comparable service (ZenRows, Bright Data
 Web Unlocker) — not a return to local scraping.
+
+### 5b. What the scrape costs
+
+**A JS-rendered ScraperAPI request costs 10 credits, not 1.** Every fetch
+in `lb_detail_scrape.py` sets `render=true` (it has to — that's what clears
+the Cloudflare challenge), so the free tier's 1,000 credits/month is a
+budget of **~100 requests/month**, not ~1,000. Both
+[ScraperAPI's credits docs](https://docs.scraperapi.com/credits-and-requests)
+and its [JS-rendering cost page](https://docs.scraperapi.com/faq/js-rendering/extra-javascript-rendering-costs)
+spell this out; premium/ultra-premium proxies would cost 25/75 instead, but
+we don't pass those.
+
+Current budget: 189 titles = 2 pages = 2 requests = **20 credits per sync**.
+At Mon/Wed/Fri that's ~13 syncs/month ≈ **260 credits, ~26%** of the tier,
+leaving headroom for manual dispatches and retries.
+
+This section exists because the numbers here were wrong until 2026-08-04,
+and the account tripped a 70%-usage warning as a result. Two compounding
+mistakes, both now fixed:
+
+- These docs and `lb_detail_scrape.py` both claimed "~3 requests/day fits
+  comfortably" in the free tier. That assumed **1 credit per request** and
+  so understated the real cost by 10x — daily syncing alone was ~910
+  credits/month, ~91% of the allowance.
+- The paging loop stopped only when a page came back with nothing new, so
+  every run paid for one extra empty page — a third of the cost, for
+  nothing. It now stops on a short page (`PAGE_SIZE` in that file), which
+  is what dropped a sync from 3 requests to 2.
+
+Worth knowing when debugging a bad day: `fetch()` retries up to 3 times per
+page, so a run against a flaky ScraperAPI can cost several times the
+nominal 20 credits. If usage ever needs cutting further, the next lever is
+schedule frequency — the per-run cost is already at its floor of one
+request per real page.
 
 ---
 

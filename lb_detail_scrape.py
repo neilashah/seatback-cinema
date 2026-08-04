@@ -37,9 +37,25 @@ here since ScraperAPI's infrastructure is what actually reaches
 Letterboxd, not GHA's). Confirmed clean on the first attempt for both
 pages of this list (2026-07-27), 189/189 titles.
 
-This project's volume (~3 requests/day) comfortably fits ScraperAPI's
-free tier (1,000 credits/month, recurring) — see DEPLOY.md §5 for the
-account/secret setup.
+CREDIT COST — read this before changing the schedule or the page loop
+---------------------------------------------------------------------
+Every fetch here sets `render=true`, and ScraperAPI bills a JS-rendered
+request at **10 credits, not 1**. The free tier is 1,000 credits/month,
+so the real budget is ~100 rendered requests per month, not ~1,000.
+
+At 189 titles this list is 2 pages, so one sync costs 2 requests = 20
+credits. On the Mon/Wed/Fri schedule in sync-catalog.yml that's ~13
+syncs/month ≈ 260 credits, about a quarter of the allowance.
+
+An earlier version of this docstring claimed "~3 requests/day fits
+comfortably" in the free tier. That assumed 1 credit per request and was
+wrong by 10x: running daily *and* paying for a third empty page (see
+PAGE_SIZE below) worked out to ~910 credits/month, ~91% of the tier,
+which is why the account tripped a 70%-usage warning on 2026-08-04.
+Worth knowing too: the retry loop in fetch() can fire up to 3 extra
+requests per page when ScraperAPI is erroring.
+
+See DEPLOY.md §5a for the account/secret setup.
 
 Run:
     export SCRAPERAPI_KEY=your_key_here
@@ -70,6 +86,12 @@ SCRAPERAPI_URL = "http://api.scraperapi.com"
 # Letterboxd's own JS) and the slug on the same tag.
 ITEM_RE = re.compile(r'data-item-name="([^"]+)"[\s\S]*?data-item-slug="([^"]+)"')
 TITLE_YEAR_RE = re.compile(r'^(.*) \((\d{4})\)$')
+
+# How many entries a *full* Letterboxd detail page holds. A short page is
+# the last one, so seeing one lets us stop without paying for an extra
+# request just to watch the next page come back empty. That probe used to
+# be a third of this script's entire credit cost (see CREDIT COST above).
+PAGE_SIZE = 100
 
 
 def extract(page_html):
@@ -123,8 +145,12 @@ def main():
             new.append((t, y, s))
         rows.extend(new)
         sys.stderr.write(f"  page {page}: {len(found)} entries ({len(new)} new)\n")
-        # Stop when a page yields nothing new (past the last page).
-        if not new:
+        # A short page means that was the last one -- stop here rather than
+        # burning a billed request on the empty page after it. The `not new`
+        # check stays as a backstop for the two cases a short page can't
+        # catch: a list whose length is an exact multiple of PAGE_SIZE (last
+        # page is full, the next is empty), and a full page of duplicates.
+        if len(found) < PAGE_SIZE or not new:
             break
         page += 1
 
