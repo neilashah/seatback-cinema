@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "title": "Obsession",
+    "year": "2025",
+    "tier": "review",
+    "note": "year hint 2025 != top match 2026; 18 candidates \u2014 check remake/original",
+    "guessId": "1339713",
+    "guessTitle": "Obsession",
+    "guessYear": "2026"
+  },
+  {
+    "title": "Man on the Run",
+    "year": "2025",
+    "tier": "review",
+    "note": "year hint 2025 != top match 2026; 2 candidates \u2014 check remake/original",
+    "guessId": "1260643",
+    "guessTitle": "Man on the Run",
+    "guessYear": "2026"
+  },
+  {
+    "title": "Silent Friend",
+    "year": "2025",
+    "tier": "review",
+    "note": "year hint 2025 != top match 2026; 2 candidates \u2014 check remake/original",
+    "guessId": "1168719",
+    "guessTitle": "Silent Friend",
+    "guessYear": "2026"
+  }
+]
